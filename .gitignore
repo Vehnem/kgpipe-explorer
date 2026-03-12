@@ -1,0 +1,12 @@
+# Local environment/config
+.env
+env
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+
+# Frontend build/cache artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo

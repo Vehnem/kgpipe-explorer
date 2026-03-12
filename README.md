@@ -1,39 +1,43 @@
-# KGpipe Explorer
+# KGpipe Explorer Development Notes
 
-A static web application for exploring the KGpipe framework's System Knowledge Graph (PipeKG) and pipeline execution results. The explorer provides an interactive interface to browse registered tasks, pipelines, metrics, and evaluation results without executing pipelines.
+This folder is the playground for a richer pipeline explorer UI.
 
-## Overview
+## Goal
 
-The KGpipe Explorer is designed to visualize and navigate the meta knowledge graph that KGpipe maintains internally. This System KG tracks:
+Move from Streamlit prototyping to a small web app architecture:
 
-- **Tasks**: Registered integration tasks with their specifications, input/output formats, and categories
-- **Pipelines**: Pipeline definitions and their composition of tasks
-- **Metrics**: Evaluation metrics and quality measurements
-- **Execution Results**: Results from pipeline runs and their associated metadata
+- React frontend for DAG editing/visualization
+- Python API backend for compatibility logic and KG-backed data
 
-## Purpose
+## Layout
 
-The explorer enables users to:
+- `frontend/`: React + TypeScript + Vite + React Flow
+- `backend/`: FastAPI API stub (to be connected to `PipeKG`)
 
-- Discover available tasks and their capabilities
-- Understand pipeline structures and task dependencies
-- Review evaluation metrics and execution results
-- Explore relationships between tasks, pipelines, and data formats
-- Navigate the System KG structure through an intuitive interface
+## Quick Start
 
-## System Knowledge Graph
+### Backend
 
-The explorer operates on the PipeKG (Meta Knowledge Graph) that KGpipe maintains internally. For detailed information about the System KG structure, query capabilities, and SPARQL examples, see the [Meta KG documentation](../../docs/metakg.md).
+From repo root:
 
-## Design Principles
+```bash
+uv run uvicorn app:app --app-dir experiments/explorer/backend --reload --port 8000
+```
 
-- **Static**: The explorer works with pre-generated System KG data and execution results. It does not execute pipelines or modify the framework state.
-- **Read-only**: All exploration is read-only, ensuring no accidental modifications to pipeline definitions or execution results.
-- **Interactive**: Provides an intuitive interface for navigating the complex relationships in the System KG.
+### Frontend
 
-## Architecture
+From `experiments/explorer/frontend`:
 
-The explorer consumes static RDF data from the System KG and presents it through a web-based interface, allowing users to query and visualize the knowledge graph structure without requiring direct SPARQL knowledge.
+```bash
+npm install
+npm run dev
+```
 
-## Backlog
-- decide on framwork and src structure
+The frontend expects the backend at `http://localhost:8000`.
+
+## Next Steps
+
+1. Replace mock API responses with live `PipeKG` queries.
+2. Add compatibility checks on edge creation.
+3. Persist/load pipeline DAG JSON.
+
