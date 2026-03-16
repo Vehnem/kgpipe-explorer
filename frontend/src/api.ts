@@ -10,7 +10,9 @@ export type TaskSpec = {
 
 export type SparqlConstructResponse = Record<string, unknown>;
 
-const API_BASE = "http://localhost:18000";
+const API_BASE =
+  (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/+$/, "") ??
+  "http://localhost:18000";
 
 export async function fetchTasks(): Promise<TaskSpec[]> {
   const res = await fetch(`${API_BASE}/tasks`);

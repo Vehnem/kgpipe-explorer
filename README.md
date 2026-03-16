@@ -42,6 +42,7 @@ The frontend expects the backend at `http://localhost:8000`.
 ### Frontend GitHub Pages Deploy
 
 The repo includes a workflow at `.github/workflows/deploy-frontend-pages.yml` that builds and deploys `frontend/` to GitHub Pages on pushes to `main` when frontend files change.
+The workflow sets `VITE_API_BASE` to `https://kgpipe-demo.v122.de/` for production builds.
 
 One-time repository setup:
 

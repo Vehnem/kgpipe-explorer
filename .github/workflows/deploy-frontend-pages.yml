@@ -38,6 +38,8 @@ jobs:
         run: npm ci
 
       - name: Build frontend
+        env:
+          VITE_API_BASE: https://kgpipe-demo.v122.de/
         run: npm run build
 
       - name: Setup Pages
