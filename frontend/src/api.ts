@@ -10,7 +10,7 @@ export type TaskSpec = {
 
 export type SparqlConstructResponse = Record<string, unknown>;
 
-const API_BASE = "http://localhost:7777";
+const API_BASE = "http://localhost:18000";
 
 export async function fetchTasks(): Promise<TaskSpec[]> {
   const res = await fetch(`${API_BASE}/tasks`);

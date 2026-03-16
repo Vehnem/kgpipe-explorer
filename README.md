@@ -18,15 +18,19 @@ Move from Streamlit prototyping to a small web app architecture:
 
 ### Backend
 
-From repo root:
+Backend setup instructions (including `uv` venv + dependencies) are in:
+
+- `backend/README.md`
+
+Quick run from repo root:
 
 ```bash
-uv run uvicorn app:app --app-dir experiments/explorer/backend --reload --port 8000
+uv run uvicorn app:app --app-dir backend --reload --port 8000
 ```
 
 ### Frontend
 
-From `experiments/explorer/frontend`:
+From `frontend`:
 
 ```bash
 npm install
@@ -34,6 +38,15 @@ npm run dev
 ```
 
 The frontend expects the backend at `http://localhost:8000`.
+
+### Frontend GitHub Pages Deploy
+
+The repo includes a workflow at `.github/workflows/deploy-frontend-pages.yml` that builds and deploys `frontend/` to GitHub Pages on pushes to `main` when frontend files change.
+
+One-time repository setup:
+
+1. In GitHub, go to **Settings -> Pages**.
+2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
 
 ## Next Steps
 
