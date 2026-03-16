@@ -31,7 +31,7 @@ RUNS_TSV_PATH = Path(__file__).resolve().parent.parent / "runs.tsv"
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "https://vehnem.github.io"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
