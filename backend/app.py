@@ -4,10 +4,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from kgpipe.common.definitions import ImplementationEntity
 from kgpipe.common.systemgraph import PipeKG
+from typing import List
+from typing import Optional
 
-
-class TaskSpec(BaseModel):
+class TaskImplSpec(BaseModel):
+    uri: Optional[str] = None
     name: str
     inputs: list[str] = []
     outputs: list[str] = []
@@ -32,32 +35,24 @@ app.add_middleware(
 )
 
 
-def _load_task_specs() -> dict[str, TaskSpec]:
+def _load_task_specs() -> dict[str, TaskImplSpec]:
     pipekg = PipeKG()
-    implementations = pipekg.list_taskImplementations()
-    io_specs = pipekg.list_task_io_specs()
+    implementations: List[ImplementationEntity] = pipekg.list_taskImplementations()
 
-    task_specs: dict[str, TaskSpec] = {}
+    task_specs: dict[str, TaskImplSpec] = {}
     for implementation in implementations:
         task_name = implementation.name
-        io = io_specs.get(task_name, {"inputs": set(), "outputs": set()})
-        task_specs[task_name] = TaskSpec(
+        input_formats = {str(fmt) for fmt in implementation.input_spec}
+        output_formats = {str(fmt) for fmt in implementation.output_spec}
+        task_specs[task_name] = TaskImplSpec(
+            uri=str(implementation.uri),
             name=task_name,
-            inputs=sorted(io.get("inputs", set())),
-            outputs=sorted(io.get("outputs", set())),
+            inputs=sorted(input_formats),
+            outputs=sorted(output_formats),
             implements_method=sorted(set(implementation.implementsMethod)),
             uses_tool=sorted(set(implementation.usesTool)),
             has_parameter=sorted(set(implementation.hasParameter)),
         )
-
-    # Include any IO-only names if no ImplementationEntity exists for them.
-    for task_name, io in io_specs.items():
-        if task_name not in task_specs:
-            task_specs[task_name] = TaskSpec(
-                name=task_name,
-                inputs=sorted(io.get("inputs", set())),
-                outputs=sorted(io.get("outputs", set())),
-            )
 
     return task_specs
 
@@ -67,8 +62,8 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/tasks", response_model=list[TaskSpec])
-def list_tasks() -> list[TaskSpec]:
+@app.get("/tasks", response_model=list[TaskImplSpec])
+def list_tasks() -> list[TaskImplSpec]:
     return sorted(_load_task_specs().values(), key=lambda task: task.name)
 
 
@@ -87,3 +82,10 @@ def check_compatibility(request: EdgeCheckRequest) -> dict[str, object]:
 
     shared = sorted(set(source.outputs).intersection(target.inputs))
     return {"compatible": bool(shared), "shared_formats": shared}
+
+from fastapi import Body
+
+@app.post("/sparql/construct")
+def construct_sparql(query: str = Body(..., embed=True)) -> dict[str, object]:
+    result = PipeKG.sparql_construct(query)
+    return result

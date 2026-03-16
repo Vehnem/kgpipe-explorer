@@ -1,383 +1,152 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  Background,
-  Controls,
-  Handle,
-  MiniMap,
-  Position,
-  ReactFlow,
-  useEdgesState,
-  useNodesState,
-  type NodeProps,
-  type Edge,
-  type Node,
-  addEdge,
-  type Connection
-} from "@xyflow/react";
+import { useEffect, useState } from "react";
 import { fetchTasks, type TaskSpec } from "./api";
+import { PipelineBuilderPage } from "./pages/PipelineBuilderPage";
+import { PipelineLeaderboardPage } from "./pages/PipelineLeaderboardPage";
+import { PipeKGExplorerPage } from "./pages/PipeKGExplorerPage";
+import { GraphViewPage } from "./pages/GraphViewPage";
 
-type PipelineNodeData = {
-  label: string;
-  inputs: string[];
-  outputs: string[];
-};
-
-type PipelineNode = Node<PipelineNodeData>;
+type PageId = "builder" | "leaderboard" | "explorer" | "graphview";
 
 export function App() {
   const [tasks, setTasks] = useState<TaskSpec[]>([]);
-  const [selectedTask, setSelectedTask] = useState<string>("");
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [search, setSearch] = useState<string>("");
-  const [connectionError, setConnectionError] = useState<string>("");
-  const [nodes, setNodes, onNodesChange] = useNodesState<PipelineNode>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [activePage, setActivePage] = useState<PageId>("builder");
+  const [selectedExplorerEntityId, setSelectedExplorerEntityId] = useState<string>("");
+  const [loadingError, setLoadingError] = useState<string>("");
 
   useEffect(() => {
-    fetchTasks().then((data) => {
-      setTasks(data);
-      if (data.length > 0) {
-        setSelectedTask(data[0].name);
-      }
-    });
+    const route = parseRoute(window.location.search);
+    setActivePage(route.page);
+    setSelectedExplorerEntityId(route.entity);
   }, []);
 
-  const taskByName = useMemo(
-    () => Object.fromEntries(tasks.map((t) => [t.name, t])),
-    [tasks]
-  );
+  useEffect(() => {
+    const onPopState = () => {
+      const route = parseRoute(window.location.search);
+      setActivePage(route.page);
+      setSelectedExplorerEntityId(route.entity);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
-  const filteredTasks = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return tasks;
-    return tasks.filter((task) => {
-      const haystack = [
-        task.name,
-        task.inputs.join(" "),
-        task.outputs.join(" ")
-      ]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [search, tasks]);
+  useEffect(() => {
+    fetchTasks()
+      .then((data) => setTasks(data))
+      .catch((error: unknown) => {
+        const message =
+          error instanceof Error ? error.message : "Failed to load task specs";
+        setLoadingError(message);
+      });
+  }, []);
 
-  const visibleTasks = useMemo(() => filteredTasks.slice(0, 30), [filteredTasks]);
-
-  function addNode(taskName: string = selectedTask) {
-    if (!taskName) return;
-    const task = taskByName[taskName];
-    if (!task) return;
-    const id = `n-${crypto.randomUUID().slice(0, 8)}`;
-    const offset = nodes.length * 40;
-    setNodes((prev) => [
-      ...prev,
-      {
-        id,
-        position: { x: 120 + offset, y: 120 + offset },
-        type: "taskNode",
-        data: {
-          label: taskName,
-          inputs: normalizeFormats(task.inputs),
-          outputs: normalizeFormats(task.outputs)
-        }
-      }
-    ]);
+  function navigateToPage(page: PageId) {
+    setActivePage(page);
+    writeRoute({ page, entity: page === "explorer" ? selectedExplorerEntityId : "" }, true);
   }
 
-  function onConnect(connection: Connection) {
-    setConnectionError("");
-
-    if (
-      !connection.source ||
-      !connection.target ||
-      !connection.sourceHandle ||
-      !connection.targetHandle
-    ) {
-      setConnectionError("Connect from output handle to input handle.");
-      return;
+  function handleExplorerEntityChange(entityId: string) {
+    setSelectedExplorerEntityId(entityId);
+    if (activePage === "explorer") {
+      writeRoute({ page: "explorer", entity: entityId }, true);
     }
-    if (connection.source === connection.target) {
-      setConnectionError("Cannot connect a node to itself.");
-      return;
-    }
-
-    const sourceFormat = parseHandleFormat(connection.sourceHandle, "out");
-    const targetFormat = parseHandleFormat(connection.targetHandle, "in");
-    if (!sourceFormat || !targetFormat) {
-      setConnectionError("Invalid handle selection.");
-      return;
-    }
-
-    const isCompatible =
-      sourceFormat === targetFormat ||
-      sourceFormat === "any" ||
-      targetFormat === "any";
-    if (!isCompatible) {
-      setConnectionError(
-        `Format mismatch: output "${sourceFormat}" cannot connect to input "${targetFormat}".`
-      );
-      return;
-    }
-
-    const edgeLabel =
-      sourceFormat === targetFormat
-        ? sourceFormat
-        : sourceFormat === "any"
-          ? targetFormat
-          : sourceFormat;
-    const edgeColor = formatColor(edgeLabel);
-
-    setEdges((prev) =>
-      addEdge(
-        {
-          ...connection,
-          label: edgeLabel,
-          style: { stroke: edgeColor, strokeWidth: 2 },
-          labelStyle: { fill: edgeColor, fontWeight: 600 },
-          animated: false
-        },
-        prev
-      )
-    );
-  }
-
-  function removeSelectedNode() {
-    if (!selectedNodeId) return;
-    setNodes((prev) => prev.filter((node) => node.id !== selectedNodeId));
-    setEdges((prev) =>
-      prev.filter(
-        (edge) => edge.source !== selectedNodeId && edge.target !== selectedNodeId
-      )
-    );
-    setSelectedNodeId(null);
   }
 
   return (
-    <div className="app">
-      <aside className="panel">
-        <h2>KGpipe Explorer</h2>
-        <p>React Flow prototype for DAG pipeline editing.</p>
-        <label htmlFor="task-search">Search tasks</label>
-        <input
-          id="task-search"
-          type="text"
-          value={search}
-          placeholder="Search by name, input, output..."
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <div className="task-list-meta">
-          Showing {visibleTasks.length} of {filteredTasks.length} matches
-          {filteredTasks.length > 30 ? " (limited to 30)" : ""}
+    <div className="app-shell">
+      <header className="app-header">
+        <div>
+          <h1>KGpipe Explorer</h1>
+          <p className="header-subtitle">Prototype workspace for pipeline design and inspection</p>
         </div>
-        <div className="task-table-wrap">
-          <table className="task-table">
-            <thead>
-              <tr>
-                <th>Task</th>
-                <th>In</th>
-                <th>Out</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {visibleTasks.map((task) => (
-                <tr
-                  key={task.name}
-                  className={task.name === selectedTask ? "selected" : ""}
-                  onClick={() => setSelectedTask(task.name)}
-                >
-                  <td>{task.name}</td>
-                  <td>{task.inputs.join(", ") || "-"}</td>
-                  <td>{task.outputs.join(", ") || "-"}</td>
-                  <td>
-                    <button
-                      className="inline-add-btn"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setSelectedTask(task.name);
-                        addNode(task.name);
-                      }}
-                    >
-                      + Add
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <button onClick={() => addNode()}>Add Selected Task</button>
-        <button
-          className="danger-btn"
-          onClick={removeSelectedNode}
-          disabled={!selectedNodeId}
-          title={
-            selectedNodeId
-              ? "Remove selected node and its connected edges"
-              : "Select a node on the canvas to remove"
-          }
-        >
-          Remove Selected Node
-        </button>
-        <p className="connect-hint">
-          {selectedNodeId
-            ? `Selected node: ${nodes.find((n) => n.id === selectedNodeId)?.data.label ?? selectedNodeId}`
-            : "No node selected"}
-        </p>
-        {connectionError ? (
-          <p className="connect-error">{connectionError}</p>
-        ) : (
-          <p className="connect-hint">
-            Connect from right output handles to left input handles.
-          </p>
-        )}
-        <h3>Loose Ends</h3>
-        <p>Roots: {countRoots(nodes, edges)}</p>
-        <p>Leaves: {countLeaves(nodes, edges)}</p>
-        {selectedTask && taskByName[selectedTask] && (
-          <pre>{JSON.stringify(taskByName[selectedTask], null, 2)}</pre>
-        )}
-      </aside>
-      <main className="canvas">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onNodeClick={(_, node) => setSelectedNodeId(node.id)}
-          onPaneClick={() => setSelectedNodeId(null)}
-          nodeTypes={{ taskNode: TaskNode }}
-          fitView
-        >
-          <MiniMap />
-          <Controls />
-          <Background />
-        </ReactFlow>
-      </main>
+        <nav className="page-tabs" aria-label="Explorer pages">
+          <button
+            type="button"
+            className={activePage === "builder" ? "active" : ""}
+            onClick={() => navigateToPage("builder")}
+          >
+            Pipeline Builder
+          </button>
+          <button
+            type="button"
+            className={activePage === "leaderboard" ? "active" : ""}
+            onClick={() => navigateToPage("leaderboard")}
+          >
+            Pipeline Leaderboard
+          </button>
+          <button
+            type="button"
+            className={activePage === "explorer" ? "active" : ""}
+            onClick={() => navigateToPage("explorer")}
+          >
+            PipeKG Explorer
+          </button>
+          <button
+            type="button"
+            className={activePage === "graphview" ? "active" : ""}
+            onClick={() => navigateToPage("graphview")}
+          >
+            GraphView
+          </button>
+        </nav>
+      </header>
+
+      {loadingError ? (
+        <main className="page-scaffold">
+          <p className="error-banner">Unable to load tasks: {loadingError}</p>
+        </main>
+      ) : (
+        <main className="app-content">
+          {activePage === "builder" && <PipelineBuilderPage tasks={tasks} />}
+          {activePage === "leaderboard" && <PipelineLeaderboardPage tasks={tasks} />}
+          {activePage === "explorer" && (
+            <PipeKGExplorerPage
+              tasks={tasks}
+              selectedEntityId={selectedExplorerEntityId}
+              onSelectedEntityIdChange={handleExplorerEntityChange}
+            />
+          )}
+          {activePage === "graphview" && <GraphViewPage tasks={tasks} />}
+        </main>
+      )}
     </div>
   );
 }
 
-function countRoots(nodes: Node[], edges: Edge[]): number {
-  const incoming = new Map<string, number>();
-  nodes.forEach((n) => incoming.set(n.id, 0));
-  edges.forEach((e) => incoming.set(e.target, (incoming.get(e.target) ?? 0) + 1));
-  return [...incoming.values()].filter((v) => v === 0).length;
-}
+type RouteState = {
+  page: PageId;
+  entity: string;
+};
 
-function countLeaves(nodes: Node[], edges: Edge[]): number {
-  const outgoing = new Map<string, number>();
-  nodes.forEach((n) => outgoing.set(n.id, 0));
-  edges.forEach((e) => outgoing.set(e.source, (outgoing.get(e.source) ?? 0) + 1));
-  return [...outgoing.values()].filter((v) => v === 0).length;
-}
-
-function normalizeFormats(values: string[]): string[] {
-  const normalized = values
-    .map((value) => value.trim().toLowerCase())
-    .filter((value) => value.length > 0)
-    .map((value) => (value.startsWith(".") ? value.slice(1) : value));
-  return [...new Set(normalized)];
-}
-
-function parseHandleFormat(handleId: string, expectedKind: "in" | "out"): string | null {
-  const [kind, rawFormat] = handleId.split(":", 2);
-  if (kind !== expectedKind) return null;
-  const format = rawFormat?.trim().toLowerCase();
-  if (!format) return null;
-  return format;
-}
-
-function formatColor(format: string): string {
-  const key = format.trim().toLowerCase();
-  const palette: Record<string, string> = {
-    txt: "#1f9d55",
-    json: "#1d4ed8",
-    rdf: "#7c3aed",
-    ttl: "#7c3aed",
-    nt: "#7c3aed",
-    csv: "#b45309",
-    xml: "#0f766e",
-    pdf: "#be123c",
-    any: "#6b7280"
+function parseRoute(search: string): RouteState {
+  const params = new URLSearchParams(search);
+  const pageParam = params.get("page");
+  const entityParam = params.get("entity");
+  const page = isPageId(pageParam) ? pageParam : "builder";
+  return {
+    page,
+    entity: entityParam?.trim() ?? ""
   };
-  if (palette[key]) return palette[key];
+}
 
-  // Deterministic fallback color for unknown formats.
-  let hash = 0;
-  for (let i = 0; i < key.length; i += 1) {
-    hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+function writeRoute(route: RouteState, push: boolean) {
+  const params = new URLSearchParams(window.location.search);
+  params.set("page", route.page);
+  if (route.page === "explorer" && route.entity.trim()) {
+    params.set("entity", route.entity.trim());
+  } else {
+    params.delete("entity");
   }
-  const hue = hash % 360;
-  return `hsl(${hue} 60% 45%)`;
+  const search = params.toString();
+  const targetUrl = `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`;
+  const method = push ? "pushState" : "replaceState";
+  window.history[method](null, "", targetUrl);
 }
 
-function TaskNode({ data, selected }: NodeProps<PipelineNode>) {
-  const inputFormats = data.inputs.length > 0 ? data.inputs : ["any"];
-  const outputFormats = data.outputs.length > 0 ? data.outputs : ["any"];
-
+function isPageId(value: string | null): value is PageId {
   return (
-    <div className={`task-node ${selected ? "selected" : ""}`}>
-      <div className="task-node-title">{data.label}</div>
-
-      {inputFormats.map((fmt, idx) => (
-        <Handle
-          key={`in-${fmt}`}
-          type="target"
-          id={`in:${fmt}`}
-          position={Position.Left}
-          style={{
-            top: 34 + idx * 16,
-            background: formatColor(fmt),
-            border: "2px solid #fff",
-            width: 10,
-            height: 10
-          }}
-        />
-      ))}
-
-      {outputFormats.map((fmt, idx) => (
-        <Handle
-          key={`out-${fmt}`}
-          type="source"
-          id={`out:${fmt}`}
-          position={Position.Right}
-          style={{
-            top: 34 + idx * 16,
-            background: formatColor(fmt),
-            border: "2px solid #fff",
-            width: 10,
-            height: 10
-          }}
-        />
-      ))}
-
-      <div className="task-node-io">
-        <div>
-          <strong>in</strong>: {formatBadges(inputFormats)}
-        </div>
-        <div>
-          <strong>out</strong>: {formatBadges(outputFormats)}
-        </div>
-      </div>
-    </div>
+    value === "builder" ||
+    value === "leaderboard" ||
+    value === "explorer" ||
+    value === "graphview"
   );
-}
-
-function formatBadges(formats: string[]) {
-  return formats.map((fmt) => (
-    <span
-      key={fmt}
-      className="fmt-badge"
-      style={{
-        backgroundColor: `${formatColor(fmt)}1f`,
-        borderColor: formatColor(fmt),
-        color: formatColor(fmt)
-      }}
-    >
-      {fmt}
-    </span>
-  ));
 }
