@@ -68,11 +68,22 @@ type RankDistributionPreview = {
   rows: RankDistributionRow[];
 };
 
+type CompactConfig = {
+  v: number;
+  f?: string;
+  sa?: string;
+  pm?: string;
+  g?: Array<[string, string, string, number]>;
+  m?: Record<string, [number, string, string, string]>;
+  p?: [string, ...string[]];
+};
+
 const DEFAULT_GROUPS: GroupConfig[] = [
-  { id: "core", label: "Core", aggregator: "mean", weight: 1 },
   { id: "coverage", label: "Coverage", aggregator: "mean", weight: 1 },
-  { id: "output", label: "Output", aggregator: "mean", weight: 1 }
+  { id: "accuracy", label: "Accuracy", aggregator: "mean", weight: 1 },
+  { id: "consistency", label: "Consistency", aggregator: "mean", weight: 1 }
 ];
+const CFG_VERSION = 1;
 
 export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps) {
   const [tsvText, setTsvText] = useState<string>("");
@@ -83,7 +94,10 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
   const [groupConfigs, setGroupConfigs] = useState<GroupConfig[]>(DEFAULT_GROUPS);
   const [metricSettings, setMetricSettings] = useState<Record<string, MetricSetting>>({});
   const [selectedPipelines, setSelectedPipelines] = useState<string[]>([]);
+  const [pipelineSelectionFromUrl, setPipelineSelectionFromUrl] =
+    useState<boolean>(false);
   const [previewMode, setPreviewMode] = useState<PreviewMode>("table");
+  const [urlConfigHydrated, setUrlConfigHydrated] = useState<boolean>(false);
 
   useEffect(() => {
     fetchLeaderboardRunsTsv()
@@ -131,6 +145,99 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
   );
 
   useEffect(() => {
+    if (urlConfigHydrated) {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const encoded = params.get("cfg");
+    if (!encoded) {
+      setUrlConfigHydrated(true);
+      return;
+    }
+    const decoded = decodeCompactConfig(encoded);
+    if (!decoded || decoded.v !== CFG_VERSION) {
+      setUrlConfigHydrated(true);
+      return;
+    }
+
+    const waitsForMetrics = Boolean(decoded.m) && metricColumns.length === 0;
+    const waitsForPipelines = Boolean(decoded.p) && availablePipelines.length === 0;
+    if (waitsForMetrics || waitsForPipelines) {
+      return;
+    }
+
+    if (decoded.f) {
+      const value = codeToFinalAggregator(decoded.f);
+      if (value) {
+        setFinalAggregator(value);
+      }
+    }
+    if (decoded.sa) {
+      const value = codeToAggregator(decoded.sa);
+      if (value) {
+        setStageAggregatorAll(value);
+      }
+    }
+    if (decoded.pm) {
+      const value = codeToPreviewMode(decoded.pm);
+      if (value) {
+        setPreviewMode(value);
+      }
+    }
+    if (decoded.g && decoded.g.length > 0) {
+      const groups = decoded.g
+        .map(([id, label, aggCode, weight]) => {
+          const aggregator = codeToAggregator(aggCode);
+          if (!id || !label || !aggregator || !Number.isFinite(weight)) {
+            return null;
+          }
+          return {
+            id,
+            label,
+            aggregator,
+            weight
+          } as GroupConfig;
+        })
+        .filter((group): group is GroupConfig => group !== null);
+      if (groups.length > 0) {
+        setGroupConfigs(groups);
+      }
+    }
+    if (decoded.p) {
+      setPipelineSelectionFromUrl(true);
+      setSelectedPipelines(resolvePipelineSelection(decoded.p, availablePipelines));
+    }
+    if (decoded.m) {
+      setMetricSettings((current) => {
+        const next: Record<string, MetricSetting> = {};
+        for (const metric of metricColumns) {
+          const fallback = current[metric] ?? {
+            enabled: true,
+            groupId: defaultGroupForMetric(metric),
+            stageAggregator: "mean",
+            stageSelection: "all"
+          };
+          const encodedSetting = decoded.m?.[metric];
+          if (!encodedSetting) {
+            next[metric] = fallback;
+            continue;
+          }
+          const [enabledFlag, groupId, aggCode, stageSelection] = encodedSetting;
+          const stageAggregator = codeToAggregator(aggCode);
+          next[metric] = {
+            enabled: enabledFlag === 1,
+            groupId: groupId || "none",
+            stageAggregator: stageAggregator ?? "mean",
+            stageSelection: stageSelection || "all"
+          };
+        }
+        return next;
+      });
+    }
+    setUrlConfigHydrated(true);
+  }, [urlConfigHydrated, metricColumns, availablePipelines]);
+
+  useEffect(() => {
     const validGroupIds = new Set(groupConfigs.map((group) => group.id));
     const validStageIds = new Set(availableStages);
     setMetricSettings((current) => {
@@ -157,14 +264,13 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
       if (availablePipelines.length === 0) {
         return [];
       }
-      if (current.length === 0) {
-        return availablePipelines;
-      }
       const valid = current.filter((pipeline) => availablePipelines.includes(pipeline));
-      const missing = availablePipelines.filter((pipeline) => !valid.includes(pipeline));
-      return [...valid, ...missing];
+      if (valid.length === 0) {
+        return pipelineSelectionFromUrl ? [] : availablePipelines;
+      }
+      return valid;
     });
-  }, [availablePipelines]);
+  }, [availablePipelines, pipelineSelectionFromUrl]);
 
   const selectedPipelineSet = useMemo(
     () => new Set(selectedPipelines),
@@ -206,6 +312,44 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
       }).length,
     [metricColumns, metricSettings]
   );
+
+  useEffect(() => {
+    if (!urlConfigHydrated) {
+      return;
+    }
+    const encoded = encodeCompactConfig({
+      finalAggregator,
+      stageAggregatorAll,
+      previewMode,
+      groupConfigs,
+      metricColumns,
+      metricSettings,
+      selectedPipelines,
+      availablePipelines
+    });
+    const params = new URLSearchParams(window.location.search);
+    if (encoded) {
+      params.set("cfg", encoded);
+    } else {
+      params.delete("cfg");
+    }
+    const search = params.toString();
+    const targetUrl = `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`;
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (targetUrl !== currentUrl) {
+      window.history.replaceState(null, "", targetUrl);
+    }
+  }, [
+    urlConfigHydrated,
+    finalAggregator,
+    stageAggregatorAll,
+    previewMode,
+    groupConfigs,
+    metricColumns,
+    metricSettings,
+    selectedPipelines,
+    availablePipelines
+  ]);
 
   return (
     <section className="page-scaffold">
@@ -442,9 +586,9 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
                   <tr>
                     <th>Metric</th>
                     <th>Use</th>
-                    <th>Stage agg</th>
-                    <th>Stage</th>
                     <th>Subgroup</th>
+                    <th>Stage</th>
+                    <th>Stage_agg</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -475,21 +619,23 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
                         </td>
                         <td>
                           <select
-                            value={setting.stageAggregator}
+                            value={setting.groupId}
                             onChange={(event) =>
                               setMetricSettings((current) => ({
                                 ...current,
                                 [metric]: {
                                   ...setting,
-                                  stageAggregator: event.target.value as AggregationMethod
+                                  groupId: event.target.value as MetricGroupId
                                 }
                               }))
                             }
                           >
-                            <option value="mean">mean</option>
-                            <option value="harmonic_mean">harmonic_mean</option>
-                            <option value="min">min</option>
-                            <option value="max">max</option>
+                            <option value="none">None</option>
+                            {groupConfigs.map((group) => (
+                              <option key={group.id} value={group.id}>
+                                {group.label}
+                              </option>
+                            ))}
                           </select>
                         </td>
                         <td>
@@ -515,23 +661,21 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
                         </td>
                         <td>
                           <select
-                            value={setting.groupId}
+                            value={setting.stageAggregator}
                             onChange={(event) =>
                               setMetricSettings((current) => ({
                                 ...current,
                                 [metric]: {
                                   ...setting,
-                                  groupId: event.target.value as MetricGroupId
+                                  stageAggregator: event.target.value as AggregationMethod
                                 }
                               }))
                             }
                           >
-                            <option value="none">None</option>
-                            {groupConfigs.map((group) => (
-                              <option key={group.id} value={group.id}>
-                                {group.label}
-                              </option>
-                            ))}
+                            <option value="mean">mean</option>
+                            <option value="harmonic_mean">harmonic_mean</option>
+                            <option value="min">min</option>
+                            <option value="max">max</option>
                           </select>
                         </td>
                       </tr>
@@ -834,14 +978,14 @@ function parseTsv(tsv: string): LeaderboardTable {
 }
 
 function defaultGroupForMetric(metric: string): MetricGroupId {
-  if (metric === "ACC_T" || metric === "1-DR") {
-    return "core";
+  if (metric === "ACC_T") {
+    return "accuracy";
   }
   if (metric.startsWith("COV_")) {
     return "coverage";
   }
-  if (metric.startsWith("O_")) {
-    return "output";
+  if (metric === "1-DR" || metric.startsWith("O_")) {
+    return "consistency";
   }
   return "none";
 }
@@ -1329,6 +1473,258 @@ function truncateLabel(label: string, maxLength: number): string {
     return label;
   }
   return `${label.slice(0, Math.max(1, maxLength - 3))}...`;
+}
+
+function encodeCompactConfig(input: {
+  finalAggregator: FinalAggregationMethod;
+  stageAggregatorAll: AggregationMethod;
+  previewMode: PreviewMode;
+  groupConfigs: GroupConfig[];
+  metricColumns: string[];
+  metricSettings: Record<string, MetricSetting>;
+  selectedPipelines: string[];
+  availablePipelines: string[];
+}): string | null {
+  const cfg: CompactConfig = { v: CFG_VERSION };
+
+  if (input.finalAggregator !== "weighted_mean") {
+    cfg.f = finalAggregatorToCode(input.finalAggregator);
+  }
+  if (input.stageAggregatorAll !== "mean") {
+    cfg.sa = aggregatorToCode(input.stageAggregatorAll);
+  }
+  if (input.previewMode !== "table") {
+    cfg.pm = previewModeToCode(input.previewMode);
+  }
+  if (!sameGroups(input.groupConfigs, DEFAULT_GROUPS)) {
+    cfg.g = input.groupConfigs.map((group) => [
+      group.id,
+      group.label,
+      aggregatorToCode(group.aggregator),
+      Number(group.weight.toFixed(4))
+    ]);
+  }
+
+  const metricOverrides: Record<string, [number, string, string, string]> = {};
+  for (const metric of input.metricColumns) {
+    const setting = input.metricSettings[metric];
+    if (!setting) {
+      continue;
+    }
+    const defaultSetting: MetricSetting = {
+      enabled: true,
+      groupId: defaultGroupForMetric(metric),
+      stageAggregator: "mean",
+      stageSelection: "all"
+    };
+    if (
+      setting.enabled !== defaultSetting.enabled ||
+      setting.groupId !== defaultSetting.groupId ||
+      setting.stageAggregator !== defaultSetting.stageAggregator ||
+      setting.stageSelection !== defaultSetting.stageSelection
+    ) {
+      metricOverrides[metric] = [
+        setting.enabled ? 1 : 0,
+        setting.groupId === "none" ? "" : setting.groupId,
+        aggregatorToCode(setting.stageAggregator),
+        setting.stageSelection === "all" ? "" : setting.stageSelection
+      ];
+    }
+  }
+  if (Object.keys(metricOverrides).length > 0) {
+    cfg.m = metricOverrides;
+  }
+
+  const selection = encodePipelineSelection(
+    input.selectedPipelines,
+    input.availablePipelines
+  );
+  if (selection !== null) {
+    cfg.p = selection;
+  }
+
+  if (Object.keys(cfg).length === 1) {
+    return null;
+  }
+  const minimal = JSON.stringify(cfg);
+  return base64UrlEncode(minimal);
+}
+
+function decodeCompactConfig(encoded: string): CompactConfig | null {
+  try {
+    const raw = base64UrlDecode(encoded);
+    const parsed = JSON.parse(raw) as CompactConfig;
+    if (!parsed || typeof parsed !== "object" || typeof parsed.v !== "number") {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function encodePipelineSelection(
+  selected: string[],
+  available: string[]
+): [string, ...string[]] | null {
+  const total = available.length;
+  if (total === 0) {
+    return null;
+  }
+  const selectedSet = new Set(selected.filter((pipeline) => available.includes(pipeline)));
+  if (selectedSet.size === total) {
+    return null;
+  }
+  const selectedSorted = available.filter((pipeline) => selectedSet.has(pipeline));
+  const excluded = available.filter((pipeline) => !selectedSet.has(pipeline));
+  if (selectedSorted.length <= excluded.length) {
+    return ["i", ...selectedSorted];
+  }
+  return ["e", ...excluded];
+}
+
+function resolvePipelineSelection(
+  encoded: [string, ...string[]],
+  available: string[]
+): string[] {
+  const [mode, ...values] = encoded;
+  const validValues = values.filter((value) => available.includes(value));
+  if (mode === "i") {
+    return validValues;
+  }
+  if (mode === "e") {
+    const excluded = new Set(validValues);
+    return available.filter((pipeline) => !excluded.has(pipeline));
+  }
+  return available;
+}
+
+function aggregatorToCode(value: AggregationMethod): string {
+  if (value === "harmonic_mean") {
+    return "h";
+  }
+  if (value === "min") {
+    return "n";
+  }
+  if (value === "max") {
+    return "x";
+  }
+  return "m";
+}
+
+function codeToAggregator(value: string): AggregationMethod | null {
+  if (value === "m") {
+    return "mean";
+  }
+  if (value === "h") {
+    return "harmonic_mean";
+  }
+  if (value === "n") {
+    return "min";
+  }
+  if (value === "x") {
+    return "max";
+  }
+  return null;
+}
+
+function finalAggregatorToCode(value: FinalAggregationMethod): string {
+  if (value === "weighted_mean") {
+    return "w";
+  }
+  if (value === "harmonic_mean") {
+    return "h";
+  }
+  if (value === "min") {
+    return "n";
+  }
+  if (value === "max") {
+    return "x";
+  }
+  return "m";
+}
+
+function codeToFinalAggregator(value: string): FinalAggregationMethod | null {
+  if (value === "w") {
+    return "weighted_mean";
+  }
+  if (value === "m") {
+    return "mean";
+  }
+  if (value === "h") {
+    return "harmonic_mean";
+  }
+  if (value === "n") {
+    return "min";
+  }
+  if (value === "x") {
+    return "max";
+  }
+  return null;
+}
+
+function previewModeToCode(value: PreviewMode): string {
+  if (value === "distribution") {
+    return "d";
+  }
+  if (value === "distribution_figure") {
+    return "f";
+  }
+  if (value === "distribution_bars") {
+    return "b";
+  }
+  if (value === "distribution_heatmap") {
+    return "h";
+  }
+  return "t";
+}
+
+function codeToPreviewMode(value: string): PreviewMode | null {
+  if (value === "t") {
+    return "table";
+  }
+  if (value === "d") {
+    return "distribution";
+  }
+  if (value === "f") {
+    return "distribution_figure";
+  }
+  if (value === "b") {
+    return "distribution_bars";
+  }
+  if (value === "h") {
+    return "distribution_heatmap";
+  }
+  return null;
+}
+
+function base64UrlEncode(value: string): string {
+  return btoa(unescape(encodeURIComponent(value)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function base64UrlDecode(value: string): string {
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/");
+  const remainder = padded.length % 4;
+  const normalized = remainder === 0 ? padded : `${padded}${"=".repeat(4 - remainder)}`;
+  return decodeURIComponent(escape(atob(normalized)));
+}
+
+function sameGroups(left: GroupConfig[], right: GroupConfig[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((item, idx) => {
+    const other = right[idx];
+    return (
+      item.id === other.id &&
+      item.label === other.label &&
+      item.aggregator === other.aggregator &&
+      item.weight === other.weight
+    );
+  });
 }
 
 function aggregate(values: number[], method: AggregationMethod): number | null {
