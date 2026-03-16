@@ -288,6 +288,303 @@ body,
   padding: 20px;
 }
 
+.leaderboard-editor {
+  display: grid;
+  grid-template-columns: minmax(520px, 1.4fr) minmax(320px, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.leaderboard-editor-left,
+.leaderboard-editor-right {
+  background: #fff;
+  border: 1px solid #dbe3ec;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.leaderboard-editor-left h3,
+.leaderboard-editor-right h3 {
+  margin: 0 0 8px;
+}
+
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-mode-toggle {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.preview-mode-toggle button {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.preview-mode-toggle button.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.editor-global-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.editor-global-controls label,
+.group-card label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.editor-global-controls select,
+.group-card select,
+.group-card input,
+.metric-settings-table select {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 5px 7px;
+  background: #fff;
+}
+
+.group-config-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.group-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.group-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.group-card h4 {
+  margin: 0;
+}
+
+.group-remove-btn {
+  border: 1px solid #fecaca;
+  background: #fff;
+  color: #b91c1c;
+  border-radius: 6px;
+  font-size: 11px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+.group-remove-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.group-actions-row {
+  margin-bottom: 10px;
+}
+
+.metric-settings h4 {
+  margin: 0 0 8px;
+}
+
+.pipeline-filter {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 10px;
+}
+
+.pipeline-filter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pipeline-filter-header h4 {
+  margin: 0;
+}
+
+.pipeline-filter-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.pipeline-filter-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(130px, 1fr));
+  gap: 6px 10px;
+}
+
+.pipeline-filter-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #334155;
+}
+
+.metric-settings-table-wrap {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.metric-settings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.metric-settings-table th,
+.metric-settings-table td {
+  text-align: left;
+  padding: 7px 8px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.metric-settings-table td:nth-child(2) {
+  width: 56px;
+}
+
+.rank-dist-track {
+  position: relative;
+  width: 100%;
+  min-width: 180px;
+  height: 14px;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.rank-dist-range {
+  position: absolute;
+  top: 3px;
+  height: 8px;
+  border-radius: 999px;
+  background: #93c5fd;
+}
+
+.rank-dist-inner {
+  position: absolute;
+  top: 3px;
+  height: 8px;
+  border-radius: 999px;
+  background: #2563eb;
+}
+
+.rank-dist-median {
+  position: absolute;
+  top: 1px;
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: #0f172a;
+  transform: translateX(-50%);
+}
+
+.rank-figure-wrap {
+  border: 1px solid #dbe3ec;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px;
+}
+
+.rank-figure-scroll {
+  width: 100%;
+  overflow: auto;
+}
+
+.rank-figure-svg {
+  width: 100%;
+  min-width: 640px;
+  height: auto;
+  display: block;
+}
+
+.rank-axis {
+  stroke: #334155;
+  stroke-width: 1.2;
+}
+
+.rank-grid {
+  stroke: #e2e8f0;
+  stroke-width: 1;
+}
+
+.rank-axis-label {
+  fill: #334155;
+  font-size: 11px;
+}
+
+.rank-figure-legend {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.heatmap-legend {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.heatmap-gradient {
+  width: 120px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: linear-gradient(
+    to right,
+    hsl(216 80% 96%),
+    hsl(216 80% 74%),
+    hsl(216 80% 44%)
+  );
+}
+
+.rank-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #334155;
+}
+
+.rank-legend-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
 .explorer-layout {
   margin-top: 14px;
   border: 1px solid #dbe3ec;

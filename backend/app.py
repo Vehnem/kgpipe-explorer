@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
 from fastapi import FastAPI
+from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -25,6 +27,7 @@ class EdgeCheckRequest(BaseModel):
 
 
 app = FastAPI(title="KGpipe Explorer API", version="0.1.0")
+RUNS_TSV_PATH = Path(__file__).resolve().parent.parent / "runs.tsv"
 
 app.add_middleware(
     CORSMiddleware,
@@ -89,3 +92,10 @@ from fastapi import Body
 def construct_sparql(query: str = Body(..., embed=True)) -> dict[str, object]:
     result = PipeKG.sparql_construct(query)
     return result
+
+
+@app.get("/leaderboard/runs")
+def get_leaderboard_runs() -> dict[str, str]:
+    if not RUNS_TSV_PATH.exists():
+        raise HTTPException(status_code=404, detail="runs.tsv not found")
+    return {"tsv": RUNS_TSV_PATH.read_text(encoding="utf-8")}

@@ -35,3 +35,15 @@ export async function constructSparql(
   }
   return (await res.json()) as SparqlConstructResponse;
 }
+
+export async function fetchLeaderboardRunsTsv(): Promise<string> {
+  const res = await fetch(`${API_BASE}/leaderboard/runs`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch leaderboard runs (${res.status})`);
+  }
+  const payload = (await res.json()) as { tsv?: unknown };
+  if (typeof payload.tsv !== "string") {
+    throw new Error("Leaderboard runs response missing TSV payload");
+  }
+  return payload.tsv;
+}
