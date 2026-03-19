@@ -805,3 +805,161 @@ body,
   padding: 8px;
   background: #fff;
 }
+
+/* ------------------------------------------------------------------ */
+/* Results page                                                         */
+/* ------------------------------------------------------------------ */
+
+.results-section {
+  background: #fff;
+  border: 1px solid #dbe3ec;
+  border-radius: 10px;
+  padding: 12px;
+  margin-top: 14px;
+}
+
+.results-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.results-section-header h3 {
+  margin: 0;
+}
+
+.results-pipeline-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.results-pipeline-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms, color 120ms;
+}
+
+.results-pipeline-btn:hover {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.results-pipeline-btn.selected {
+  background: #eff6ff;
+  border-color: #2563eb;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+/* Numbered badge inside the pipeline button (A=1, B=2) */
+.results-pipeline-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.results-artifacts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.results-artifact-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.results-artifact-pipeline {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.results-artifact-stage {
+  border: 1px solid #f1f5f9;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #f8fafc;
+}
+
+.results-artifact-stage-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+.results-artifact-file {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  row-gap: 1px;
+  align-items: start;
+  padding: 5px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+}
+
+.results-artifact-icon {
+  grid-row: 1 / 3;
+  align-self: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #2563eb;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  text-align: center;
+}
+
+.results-artifact-file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.results-artifact-filename {
+  font-weight: 600;
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.results-artifact-size {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+  align-self: center;
+}
+
+.results-artifact-path {
+  grid-column: 2 / 4;
+  font-size: 10px;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

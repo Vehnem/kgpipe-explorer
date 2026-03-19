@@ -11,6 +11,9 @@ from kgpipe.common.systemgraph import PipeKG
 from typing import List
 from typing import Optional
 
+import csv
+import hashlib
+
 class TaskImplSpec(BaseModel):
     uri: Optional[str] = None
     name: str
@@ -99,3 +102,159 @@ def get_leaderboard_runs() -> dict[str, str]:
     if not RUNS_TSV_PATH.exists():
         raise HTTPException(status_code=404, detail="runs.tsv not found")
     return {"tsv": RUNS_TSV_PATH.read_text(encoding="utf-8")}
+
+
+# ---------------------------------------------------------------------------
+# Results / artifacts
+# ---------------------------------------------------------------------------
+
+class ArtifactFile(BaseModel):
+    name: str
+    description: str
+    mime_type: str
+    size_bytes: int
+    path: str
+
+
+def _seed(pipeline: str, stage: str, salt: str = "") -> int:
+    """Deterministic seed from (pipeline, stage, salt) for mock size variation."""
+    digest = hashlib.md5(f"{pipeline}|{stage}|{salt}".encode()).digest()
+    return int.from_bytes(digest[:4], "big")
+
+
+def _vary(base: int, pipeline: str, stage: str, salt: str = "", spread: int = 0) -> int:
+    """Return *base* ± spread, deterministically varied by the inputs."""
+    if spread == 0:
+        return base
+    offset = (_seed(pipeline, stage, salt) % (2 * spread + 1)) - spread
+    return base + offset
+
+
+# Artifact templates per stage, parameterised by (pipeline, stage).
+_STAGE_ARTIFACTS: dict[str, list[dict]] = {
+    "stage_1": [
+        {
+            "name": "candidates.tsv",
+            "description": "Entity and relation candidates extracted from source text",
+            "mime_type": "text/tab-separated-values",
+            "base_size": 48_000,
+            "spread": 12_000,
+        },
+        {
+            "name": "raw_triples.nt",
+            "description": "Initial triple dump in N-Triples format before linking",
+            "mime_type": "application/n-triples",
+            "base_size": 31_500,
+            "spread": 8_000,
+        },
+        {
+            "name": "stage1_log.json",
+            "description": "Processing log with token counts and timing",
+            "mime_type": "application/json",
+            "base_size": 4_200,
+            "spread": 600,
+        },
+    ],
+    "stage_2": [
+        {
+            "name": "linked_triples.nt",
+            "description": "Triples after entity linking and disambiguation",
+            "mime_type": "application/n-triples",
+            "base_size": 29_800,
+            "spread": 7_500,
+        },
+        {
+            "name": "linking_report.json",
+            "description": "Linking statistics: hit rate, NIL counts, confidence histogram",
+            "mime_type": "application/json",
+            "base_size": 2_900,
+            "spread": 400,
+        },
+    ],
+    "stage_3": [
+        {
+            "name": "final_kg.ttl",
+            "description": "Final knowledge graph serialised as Turtle",
+            "mime_type": "text/turtle",
+            "base_size": 85_000,
+            "spread": 20_000,
+        },
+        {
+            "name": "eval_report.json",
+            "description": "Full evaluation metrics dump (precision, recall, F1 per relation type)",
+            "mime_type": "application/json",
+            "base_size": 6_800,
+            "spread": 1_200,
+        },
+        {
+            "name": "run_summary.json",
+            "description": "High-level run metadata: pipeline ID, timestamp, total triples, wall time",
+            "mime_type": "application/json",
+            "base_size": 980,
+            "spread": 120,
+        },
+    ],
+}
+
+
+def _read_pipeline_stages() -> dict[str, list[str]]:
+    """Return {pipeline: [stage, …]} read from runs.tsv (preserves order)."""
+    if not RUNS_TSV_PATH.exists():
+        return {}
+    seen: dict[str, list[str]] = {}
+    with RUNS_TSV_PATH.open(encoding="utf-8") as fh:
+        reader = csv.DictReader(fh, delimiter="\t")
+        for row in reader:
+            pipeline = row.get("pipeline", "").strip()
+            stage = row.get("stage", "").strip()
+            if not pipeline or not stage:
+                continue
+            if pipeline not in seen:
+                seen[pipeline] = []
+            if stage not in seen[pipeline]:
+                seen[pipeline].append(stage)
+    return seen
+
+
+def _build_mock_artifacts(
+    pipeline_stages: dict[str, list[str]],
+) -> dict[str, dict[str, list[ArtifactFile]]]:
+    """
+    Generate deterministic mock artifact listings for every (pipeline, stage)
+    combination present in the runs data.
+    """
+    result: dict[str, dict[str, list[ArtifactFile]]] = {}
+    for pipeline, stages in pipeline_stages.items():
+        result[pipeline] = {}
+        for stage in stages:
+            templates = _STAGE_ARTIFACTS.get(stage, [])
+            files: list[ArtifactFile] = []
+            for tpl in templates:
+                size = _vary(
+                    tpl["base_size"], pipeline, stage, tpl["name"], tpl["spread"]
+                )
+                files.append(
+                    ArtifactFile(
+                        name=tpl["name"],
+                        description=tpl["description"],
+                        mime_type=tpl["mime_type"],
+                        size_bytes=size,
+                        path=f"runs/{pipeline}/{stage}/{tpl['name']}",
+                    )
+                )
+            result[pipeline][stage] = files
+    return result
+
+
+@app.get("/results/artifacts")
+def get_results_artifacts() -> dict[str, dict[str, list[ArtifactFile]]]:
+    """
+    Mock endpoint — returns deterministic artifact file listings for every
+    (pipeline, stage) combination found in runs.tsv.
+
+    Shape: { pipeline_id: { stage_id: [ArtifactFile, …] } }
+    """
+    if not RUNS_TSV_PATH.exists():
+        raise HTTPException(status_code=404, detail="runs.tsv not found")
+    pipeline_stages = _read_pipeline_stages()
+    return _build_mock_artifacts(pipeline_stages)

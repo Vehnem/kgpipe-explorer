@@ -10,6 +10,17 @@ export type TaskSpec = {
 
 export type SparqlConstructResponse = Record<string, unknown>;
 
+export type ArtifactFile = {
+  name: string;
+  description: string;
+  mime_type: string;
+  size_bytes: number;
+  path: string;
+};
+
+/** { pipeline_id: { stage_id: ArtifactFile[] } } */
+export type ResultsArtifacts = Record<string, Record<string, ArtifactFile[]>>;
+
 const API_BASE =
   (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/+$/, "") ??
   "http://localhost:18000";
@@ -48,4 +59,12 @@ export async function fetchLeaderboardRunsTsv(): Promise<string> {
     throw new Error("Leaderboard runs response missing TSV payload");
   }
   return payload.tsv;
+}
+
+export async function fetchResultsArtifacts(): Promise<ResultsArtifacts> {
+  const res = await fetch(`${API_BASE}/results/artifacts`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch results artifacts (${res.status})`);
+  }
+  return (await res.json()) as ResultsArtifacts;
 }

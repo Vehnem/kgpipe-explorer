@@ -4,8 +4,9 @@ import { PipelineBuilderPage } from "./pages/PipelineBuilderPage";
 import { PipelineLeaderboardPage } from "./pages/PipelineLeaderboardPage";
 import { PipeKGExplorerPage } from "./pages/PipeKGExplorerPage";
 import { GraphViewPage } from "./pages/GraphViewPage";
+import { ResultsPage } from "./pages/ResultsPage";
 
-type PageId = "builder" | "leaderboard" | "explorer" | "graphview";
+type PageId = "builder" | "leaderboard" | "explorer" | "graphview" | "results";
 
 export function App() {
   const [tasks, setTasks] = useState<TaskSpec[]>([]);
@@ -87,6 +88,13 @@ export function App() {
           >
             GraphView
           </button>
+          <button
+            type="button"
+            className={activePage === "results" ? "active" : ""}
+            onClick={() => navigateToPage("results")}
+          >
+            Results
+          </button>
         </nav>
       </header>
 
@@ -106,6 +114,7 @@ export function App() {
             />
           )}
           {activePage === "graphview" && <GraphViewPage tasks={tasks} />}
+          {activePage === "results" && <ResultsPage tasks={tasks} />}
         </main>
       )}
     </div>
@@ -147,6 +156,7 @@ function isPageId(value: string | null): value is PageId {
     value === "builder" ||
     value === "leaderboard" ||
     value === "explorer" ||
-    value === "graphview"
+    value === "graphview" ||
+    value === "results"
   );
 }
