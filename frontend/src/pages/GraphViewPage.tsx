@@ -108,10 +108,76 @@ function buildGraphFromResult(result: Record<string, unknown>): {
   };
 }
 
+type ExampleQuery = {
+  label: string;
+  query: string;
+};
+
+const EXAMPLE_QUERIES: ExampleQuery[] = [
+  {
+    label: "All triples (sample, limit 20)",
+    query: "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 20"
+  },
+  {
+    label: "All task implementations",
+    query: `PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>
+CONSTRUCT { ?impl ?p ?o }
+WHERE {
+  ?impl a kgo:Implementation ;
+        ?p ?o .
+} LIMIT 60`
+  },
+  {
+    label: "Tasks and their tools",
+    query: `PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>
+PREFIX kgr: <http://github.com/ScaDS/kgpipe/resource/>
+CONSTRUCT { ?impl kgo:usesTool ?tool }
+WHERE {
+  ?impl a kgo:Implementation ;
+        kgo:usesTool ?tool .
+} LIMIT 80`
+  },
+  {
+    label: "Tasks and their implemented methods",
+    query: `PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>
+CONSTRUCT { ?impl kgo:implementsMethod ?method }
+WHERE {
+  ?impl a kgo:Implementation ;
+        kgo:implementsMethod ?method .
+} LIMIT 80`
+  },
+  {
+    label: "Tasks and their parameters",
+    query: `PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>
+CONSTRUCT { ?impl kgo:hasParameter ?param }
+WHERE {
+  ?impl a kgo:Implementation ;
+        kgo:hasParameter ?param .
+} LIMIT 80`
+  },
+  {
+    label: "Tasks with inputs and outputs",
+    query: `PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>
+CONSTRUCT { ?impl ?rel ?format }
+WHERE {
+  ?impl a kgo:Implementation .
+  { ?impl kgo:hasInput ?format . BIND(kgo:hasInput AS ?rel) }
+  UNION
+  { ?impl kgo:hasOutput ?format . BIND(kgo:hasOutput AS ?rel) }
+} LIMIT 100`
+  },
+  {
+    label: "Full neighbourhood of one task (limit 1)",
+    query: `PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>
+CONSTRUCT { ?impl ?p ?o }
+WHERE {
+  ?impl a kgo:Implementation ; ?p ?o .
+} LIMIT 30`
+  }
+];
+
 export function GraphViewPage({ tasks }: GraphViewPageProps) {
-  const [queryText, setQueryText] = useState<string>(
-    "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 20"
-  );
+  const [queryText, setQueryText] = useState<string>(EXAMPLE_QUERIES[0].query);
   const [entitySearch, setEntitySearch] = useState<string>("");
   const [selectedEntity, setSelectedEntity] = useState<string>("");
   const [queryRunning, setQueryRunning] = useState<boolean>(false);
@@ -245,7 +311,28 @@ export function GraphViewPage({ tasks }: GraphViewPageProps) {
         <div className="graphview-top">
           <section className="query-panel">
             <h3>Query</h3>
-            <label htmlFor="graph-query">Graph query text</label>
+            <label htmlFor="example-query-select">Example queries</label>
+            <select
+              id="example-query-select"
+              defaultValue=""
+              onChange={(event) => {
+                const chosen = EXAMPLE_QUERIES.find(
+                  (q) => q.label === event.target.value
+                );
+                if (chosen) setQueryText(chosen.query);
+                event.target.value = "";
+              }}
+            >
+              <option value="" disabled>
+                — select an example —
+              </option>
+              {EXAMPLE_QUERIES.map((q) => (
+                <option key={q.label} value={q.label}>
+                  {q.label}
+                </option>
+              ))}
+            </select>
+            <label htmlFor="graph-query">Query text</label>
             <textarea
               id="graph-query"
               value={queryText}

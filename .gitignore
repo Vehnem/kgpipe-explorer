@@ -1,7 +1,7 @@
 # Local environment/config
 .env
 env
-.log
+*.log
 
 # Python artifacts
 __pycache__/
