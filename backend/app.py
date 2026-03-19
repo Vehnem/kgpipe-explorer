@@ -108,6 +108,10 @@ class ExamplePipelineNode(BaseModel):
     outputs: list[str]
     position_x: float
     position_y: float
+    # For data-element nodes (sources / sinks); omit for normal task nodes.
+    node_type: str = "taskNode"      # "taskNode" | "dataNode"
+    format: Optional[str] = None     # data format for dataNode (e.g. "txt", "ttl")
+    data_kind: Optional[str] = None  # "source" | "sink" for dataNode
 
 
 class ExamplePipelineEdge(BaseModel):
@@ -135,16 +139,28 @@ _EXAMPLE_PIPELINES: list[ExamplePipeline] = [
         id="example_ner_to_kg",
         name="NER → KG Linker",
         description=(
-            "Two-step demo pipeline: a named-entity recogniser writes a Turtle "
-            "graph that is consumed by a KG linker producing the final linked graph."
+            "Text source fed into a named-entity recogniser, "
+            "whose Turtle output is consumed by a KG linker. "
+            "The final linked graph is collected by a KG sink."
         ),
         nodes=[
+            ExamplePipelineNode(
+                id="n-text-src",
+                task_name="Text",
+                inputs=[],
+                outputs=[],
+                position_x=20,
+                position_y=140,
+                node_type="dataNode",
+                format="txt",
+                data_kind="source",
+            ),
             ExamplePipelineNode(
                 id="n-ner",
                 task_name="NERExtractor",
                 inputs=["txt"],
                 outputs=["ttl"],
-                position_x=100,
+                position_x=220,
                 position_y=140,
             ),
             ExamplePipelineNode(
@@ -152,16 +168,41 @@ _EXAMPLE_PIPELINES: list[ExamplePipeline] = [
                 task_name="KGLinker",
                 inputs=["ttl"],
                 outputs=["ttl", "json"],
-                position_x=420,
+                position_x=480,
                 position_y=140,
+            ),
+            ExamplePipelineNode(
+                id="n-kg-sink",
+                task_name="KG",
+                inputs=[],
+                outputs=[],
+                position_x=740,
+                position_y=140,
+                node_type="dataNode",
+                format="ttl",
+                data_kind="sink",
             ),
         ],
         edges=[
+            ExamplePipelineEdge(
+                source="n-text-src",
+                target="n-ner",
+                source_handle="out:txt",
+                target_handle="in:txt",
+                format_label="txt",
+            ),
             ExamplePipelineEdge(
                 source="n-ner",
                 target="n-linker",
                 source_handle="out:ttl",
                 target_handle="in:ttl",
+                format_label="ttl",
+            ),
+            ExamplePipelineEdge(
+                source="n-linker",
+                target="n-kg-sink",
+                source_handle="out:ttl",
+                target_handle="in:any",
                 format_label="ttl",
             ),
         ],

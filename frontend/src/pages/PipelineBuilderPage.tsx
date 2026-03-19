@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Background,
   Controls,
@@ -23,7 +23,22 @@ type PipelineNodeData = {
   outputs: string[];
 };
 
+type DataNodeData = {
+  label: string;
+  format: string;
+  dataKind: "source" | "sink";
+};
+
 type PipelineNode = Node<PipelineNodeData>;
+type DataNode = Node<DataNodeData>;
+type AnyNode = PipelineNode | DataNode;
+
+const DATA_ELEMENTS: { label: string; format: string; dataKind: "source" | "sink" }[] = [
+  { label: "Text", format: "txt",  dataKind: "source" },
+  { label: "JSON", format: "json", dataKind: "source" },
+  { label: "RDF",  format: "rdf",  dataKind: "source" },
+  { label: "KG",   format: "ttl",  dataKind: "sink"   },
+];
 
 type PipelineBuilderPageProps = {
   tasks: TaskSpec[];
@@ -34,10 +49,11 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [search, setSearch] = useState<string>("");
   const [connectionError, setConnectionError] = useState<string>("");
-  const [nodes, setNodes, onNodesChange] = useNodesState<PipelineNode>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<AnyNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   const [examples, setExamples] = useState<ExamplePipeline[]>([]);
+  const [inspectedTask, setInspectedTask] = useState<TaskSpec | null>(null);
 
   useEffect(() => {
     if (tasks.length === 0) {
@@ -61,16 +77,30 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
     const example = examples.find((e) => e.id === exampleId);
     if (!example) return;
 
-    const newNodes: PipelineNode[] = example.nodes.map((n) => ({
-      id: n.id,
-      position: { x: n.position_x, y: n.position_y },
-      type: "taskNode",
-      data: {
-        label: n.task_name,
-        inputs: normalizeFormats(n.inputs),
-        outputs: normalizeFormats(n.outputs)
+    const newNodes: AnyNode[] = example.nodes.map((n) => {
+      if (n.node_type === "dataNode") {
+        return {
+          id: n.id,
+          position: { x: n.position_x, y: n.position_y },
+          type: "dataNode",
+          data: {
+            label: n.task_name,
+            format: n.format ?? "",
+            dataKind: (n.data_kind ?? "source") as "source" | "sink"
+          }
+        } as DataNode;
       }
-    }));
+      return {
+        id: n.id,
+        position: { x: n.position_x, y: n.position_y },
+        type: "taskNode",
+        data: {
+          label: n.task_name,
+          inputs: normalizeFormats(n.inputs),
+          outputs: normalizeFormats(n.outputs)
+        }
+      } as PipelineNode;
+    });
 
     const newEdges: Edge[] = example.edges.map((e, idx) => {
       const color = formatColor(e.format_label);
@@ -128,6 +158,21 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           outputs: normalizeFormats(task.outputs)
         }
       }
+    ]);
+  }
+
+  function addDataNode(label: string, format: string, dataKind: "source" | "sink") {
+    const id = `d-${crypto.randomUUID().slice(0, 8)}`;
+    const offset = nodes.length * 30;
+    const x = dataKind === "source" ? 20 : 700;
+    setNodes((prev) => [
+      ...prev,
+      {
+        id,
+        position: { x, y: 100 + offset },
+        type: "dataNode",
+        data: { label, format, dataKind }
+      } as DataNode
     ]);
   }
 
@@ -228,6 +273,27 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           </>
         )}
 
+        <h3 style={{ marginBottom: 4 }}>Data Elements</h3>
+        <p style={{ marginTop: 0, fontSize: 12, color: "#475569" }}>
+          Add source or result data nodes to connect to pipeline ends.
+        </p>
+        <div className="data-element-buttons">
+          {DATA_ELEMENTS.map((el) => (
+            <button
+              key={el.label}
+              type="button"
+              className="data-element-btn"
+              style={{
+                borderColor: formatColor(el.format),
+                color: formatColor(el.format)
+              }}
+              onClick={() => addDataNode(el.label, el.format, el.dataKind)}
+            >
+              {el.dataKind === "source" ? "▶" : "◆"} {el.label}
+            </button>
+          ))}
+        </div>
+
         <label htmlFor="task-search">Search tasks</label>
         <input
           id="task-search"
@@ -237,47 +303,79 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           onChange={(e) => setSearch(e.target.value)}
         />
         <div className="builder-task-list-meta">
-          Showing {visibleTasks.length} of {filteredTasks.length} matches
-          {filteredTasks.length > 30 ? " (limited to 30)" : ""}
+          {filteredTasks.length} task{filteredTasks.length !== 1 ? "s" : ""}
+          {filteredTasks.length > 30 ? " (showing first 30)" : ""}
+          {" — click to inspect, "}
+          <strong>+</strong>
+          {" to add"}
         </div>
-        <div className="builder-task-table-wrap">
-          <table className="builder-task-table">
-            <thead>
-              <tr>
-                <th>Task</th>
-                <th>In</th>
-                <th>Out</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {visibleTasks.map((task) => (
-                <tr
-                  key={task.name}
-                  className={task.name === selectedTask ? "selected" : ""}
-                  onClick={() => setSelectedTask(task.name)}
+        <div className="task-item-list">
+          {visibleTasks.map((task) => {
+            const inputs = normalizeFormats(task.inputs);
+            const outputs = normalizeFormats(task.outputs);
+            return (
+              <div
+                key={task.name}
+                className={`task-list-item${task.name === selectedTask ? " selected" : ""}`}
+                onClick={() => {
+                  setSelectedTask(task.name);
+                  setInspectedTask(task);
+                }}
+              >
+                <div className="task-list-item-main">
+                  <span className="task-list-item-name" title={task.name}>
+                    {task.name}
+                  </span>
+                  <div className="task-list-item-io">
+                    {inputs.map((fmt) => (
+                      <span
+                        key={fmt}
+                        className="fmt-badge"
+                        style={{
+                          backgroundColor: `${formatColor(fmt)}1f`,
+                          borderColor: formatColor(fmt),
+                          color: formatColor(fmt)
+                        }}
+                      >
+                        {fmt}
+                      </span>
+                    ))}
+                    {inputs.length > 0 && outputs.length > 0 && (
+                      <span className="task-list-io-arrow">→</span>
+                    )}
+                    {outputs.map((fmt) => (
+                      <span
+                        key={fmt}
+                        className="fmt-badge"
+                        style={{
+                          backgroundColor: `${formatColor(fmt)}1f`,
+                          borderColor: formatColor(fmt),
+                          color: formatColor(fmt)
+                        }}
+                      >
+                        {fmt}
+                      </span>
+                    ))}
+                    {inputs.length === 0 && outputs.length === 0 && (
+                      <span className="muted" style={{ fontSize: 10 }}>no IO declared</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="task-list-add-btn"
+                  title={`Add ${task.name} to canvas`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    addNode(task.name);
+                  }}
                 >
-                  <td>{task.name}</td>
-                  <td>{task.inputs.join(", ") || "-"}</td>
-                  <td>{task.outputs.join(", ") || "-"}</td>
-                  <td>
-                    <button
-                      className="inline-add-btn"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setSelectedTask(task.name);
-                        addNode(task.name);
-                      }}
-                    >
-                      + Add
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  +
+                </button>
+              </div>
+            );
+          })}
         </div>
-        <button onClick={() => addNode()}>Add Selected Task</button>
         <button
           className="danger-btn"
           onClick={removeSelectedNode}
@@ -305,9 +403,6 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         <h3>Loose Ends</h3>
         <p>Roots: {countRoots(nodes, edges)}</p>
         <p>Leaves: {countLeaves(nodes, edges)}</p>
-        {selectedTask && taskByName[selectedTask] && (
-          <pre>{JSON.stringify(taskByName[selectedTask], null, 2)}</pre>
-        )}
       </aside>
       <main className="builder-canvas">
         <ReactFlow
@@ -318,7 +413,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           onConnect={onConnect}
           onNodeClick={(_, node) => setSelectedNodeId(node.id)}
           onPaneClick={() => setSelectedNodeId(null)}
-          nodeTypes={{ taskNode: TaskNode }}
+          nodeTypes={{ taskNode: TaskNode, dataNode: DataNode }}
           fitView
         >
           <MiniMap />
@@ -326,6 +421,114 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           <Background />
         </ReactFlow>
       </main>
+
+      {inspectedTask && (
+        <TaskDetailModal
+          task={inspectedTask}
+          onClose={() => setInspectedTask(null)}
+          onAddToCanvas={() => addNode(inspectedTask.name)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Task detail modal
+// ---------------------------------------------------------------------------
+
+type TaskDetailModalProps = {
+  task: TaskSpec;
+  onClose: () => void;
+  onAddToCanvas: () => void;
+};
+
+function TagPills({ values, empty }: { values: string[]; empty: string }) {
+  if (values.length === 0) return <span className="muted">{empty}</span>;
+  return (
+    <div className="tag-list">
+      {values.map((v) => (
+        <span key={v} className="tag">
+          {v}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function TaskDetailModal({ task, onClose, onAddToCanvas }: TaskDetailModalProps) {
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  function handleBackdrop(e: React.MouseEvent) {
+    if (e.target === e.currentTarget) onClose();
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={handleBackdrop}>
+      <div className="modal-card" role="dialog" aria-modal="true" aria-label={task.name}>
+        <div className="modal-header">
+          <h3>{task.name}</h3>
+          <button className="modal-close-btn" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
+
+        <div className="modal-body">
+          {task.uri && (
+            <div className="modal-section">
+              <h4>URI</h4>
+              <code className="modal-uri">{task.uri}</code>
+            </div>
+          )}
+          <div className="modal-section">
+            <h4>Inputs</h4>
+            <TagPills values={task.inputs} empty="No declared inputs" />
+          </div>
+          <div className="modal-section">
+            <h4>Outputs</h4>
+            <TagPills values={task.outputs} empty="No declared outputs" />
+          </div>
+          {(task.implements_method?.length ?? 0) > 0 && (
+            <div className="modal-section">
+              <h4>Implements Method</h4>
+              <TagPills values={task.implements_method ?? []} empty="" />
+            </div>
+          )}
+          {(task.uses_tool?.length ?? 0) > 0 && (
+            <div className="modal-section">
+              <h4>Uses Tool</h4>
+              <TagPills values={task.uses_tool ?? []} empty="" />
+            </div>
+          )}
+          {(task.has_parameter?.length ?? 0) > 0 && (
+            <div className="modal-section">
+              <h4>Parameters</h4>
+              <TagPills values={task.has_parameter ?? []} empty="" />
+            </div>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button type="button" onClick={onClose}>
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onAddToCanvas();
+              onClose();
+            }}
+          >
+            + Add to Canvas
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -431,6 +634,39 @@ function TaskNode({ data, selected }: NodeProps<PipelineNode>) {
           <strong>out</strong>: {formatBadges(outputFormats)}
         </div>
       </div>
+    </div>
+  );
+}
+
+function DataNode({ data, selected }: NodeProps<DataNode>) {
+  const color = formatColor(data.format);
+  const isSink = data.dataKind === "sink";
+
+  return (
+    <div
+      className={`data-node${isSink ? " data-node--sink" : " data-node--source"}${selected ? " selected" : ""}`}
+      style={{ borderColor: color }}
+    >
+      {isSink && (
+        <Handle
+          type="target"
+          id="in:any"
+          position={Position.Left}
+          style={{ background: color, border: "2px solid #fff", width: 10, height: 10 }}
+        />
+      )}
+      <span className="data-node-icon" style={{ color }}>
+        {isSink ? "◆" : "▶"}
+      </span>
+      <span className="data-node-label">{data.label}</span>
+      {!isSink && (
+        <Handle
+          type="source"
+          id={`out:${data.format}`}
+          position={Position.Right}
+          style={{ background: color, border: "2px solid #fff", width: 10, height: 10 }}
+        />
+      )}
     </div>
   );
 }

@@ -28,6 +28,9 @@ export type ExamplePipelineNode = {
   outputs: string[];
   position_x: number;
   position_y: number;
+  node_type?: string;   // "taskNode" (default) | "dataNode"
+  format?: string;      // dataNode: format string, e.g. "txt", "ttl"
+  data_kind?: string;   // dataNode: "source" | "sink"
 };
 
 export type ExamplePipelineEdge = {
