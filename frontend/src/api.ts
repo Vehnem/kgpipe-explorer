@@ -21,6 +21,31 @@ export type ArtifactFile = {
 /** { pipeline_id: { stage_id: ArtifactFile[] } } */
 export type ResultsArtifacts = Record<string, Record<string, ArtifactFile[]>>;
 
+export type ExamplePipelineNode = {
+  id: string;
+  task_name: string;
+  inputs: string[];
+  outputs: string[];
+  position_x: number;
+  position_y: number;
+};
+
+export type ExamplePipelineEdge = {
+  source: string;
+  target: string;
+  source_handle: string;
+  target_handle: string;
+  format_label: string;
+};
+
+export type ExamplePipeline = {
+  id: string;
+  name: string;
+  description: string;
+  nodes: ExamplePipelineNode[];
+  edges: ExamplePipelineEdge[];
+};
+
 const API_BASE =
   (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/+$/, "") ??
   "http://localhost:18000";
@@ -59,6 +84,14 @@ export async function fetchLeaderboardRunsTsv(): Promise<string> {
     throw new Error("Leaderboard runs response missing TSV payload");
   }
   return payload.tsv;
+}
+
+export async function fetchExamplePipelines(): Promise<ExamplePipeline[]> {
+  const res = await fetch(`${API_BASE}/pipelines/examples`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch example pipelines (${res.status})`);
+  }
+  return (await res.json()) as ExamplePipeline[];
 }
 
 export async function fetchResultsArtifacts(): Promise<ResultsArtifacts> {

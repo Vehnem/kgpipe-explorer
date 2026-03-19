@@ -97,6 +97,84 @@ def construct_sparql(query: str = Body(..., embed=True)) -> dict[str, object]:
     return result
 
 
+# ---------------------------------------------------------------------------
+# Example / saved pipelines
+# ---------------------------------------------------------------------------
+
+class ExamplePipelineNode(BaseModel):
+    id: str
+    task_name: str
+    inputs: list[str]
+    outputs: list[str]
+    position_x: float
+    position_y: float
+
+
+class ExamplePipelineEdge(BaseModel):
+    source: str       # node id
+    target: str       # node id
+    source_handle: str  # e.g. "out:ttl"
+    target_handle: str  # e.g. "in:ttl"
+    format_label: str   # edge label / shared format
+
+
+class ExamplePipeline(BaseModel):
+    id: str
+    name: str
+    description: str
+    nodes: list[ExamplePipelineNode]
+    edges: list[ExamplePipelineEdge]
+
+
+# ---------------------------------------------------------------------------
+# Mock pipelines — replace / extend this list once real pipelines are stored.
+# ---------------------------------------------------------------------------
+
+_EXAMPLE_PIPELINES: list[ExamplePipeline] = [
+    ExamplePipeline(
+        id="example_ner_to_kg",
+        name="NER → KG Linker",
+        description=(
+            "Two-step demo pipeline: a named-entity recogniser writes a Turtle "
+            "graph that is consumed by a KG linker producing the final linked graph."
+        ),
+        nodes=[
+            ExamplePipelineNode(
+                id="n-ner",
+                task_name="NERExtractor",
+                inputs=["txt"],
+                outputs=["ttl"],
+                position_x=100,
+                position_y=140,
+            ),
+            ExamplePipelineNode(
+                id="n-linker",
+                task_name="KGLinker",
+                inputs=["ttl"],
+                outputs=["ttl", "json"],
+                position_x=420,
+                position_y=140,
+            ),
+        ],
+        edges=[
+            ExamplePipelineEdge(
+                source="n-ner",
+                target="n-linker",
+                source_handle="out:ttl",
+                target_handle="in:ttl",
+                format_label="ttl",
+            ),
+        ],
+    ),
+]
+
+
+@app.get("/pipelines/examples", response_model=list[ExamplePipeline])
+def list_example_pipelines() -> list[ExamplePipeline]:
+    """Return named / saved example pipeline templates."""
+    return _EXAMPLE_PIPELINES
+
+
 @app.get("/leaderboard/runs")
 def get_leaderboard_runs() -> dict[str, str]:
     if not RUNS_TSV_PATH.exists():

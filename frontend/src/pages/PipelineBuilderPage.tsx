@@ -14,7 +14,8 @@ import {
   addEdge,
   type Connection
 } from "@xyflow/react";
-import type { TaskSpec } from "../api";
+import type { ExamplePipeline, TaskSpec } from "../api";
+import { fetchExamplePipelines } from "../api";
 
 type PipelineNodeData = {
   label: string;
@@ -36,6 +37,8 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<PipelineNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
+  const [examples, setExamples] = useState<ExamplePipeline[]>([]);
+
   useEffect(() => {
     if (tasks.length === 0) {
       setSelectedTask("");
@@ -45,6 +48,49 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
       setSelectedTask(tasks[0].name);
     }
   }, [tasks, selectedTask]);
+
+  useEffect(() => {
+    fetchExamplePipelines()
+      .then(setExamples)
+      .catch(() => {
+        // Non-critical — silently ignore if examples are unavailable
+      });
+  }, []);
+
+  function loadExample(exampleId: string) {
+    const example = examples.find((e) => e.id === exampleId);
+    if (!example) return;
+
+    const newNodes: PipelineNode[] = example.nodes.map((n) => ({
+      id: n.id,
+      position: { x: n.position_x, y: n.position_y },
+      type: "taskNode",
+      data: {
+        label: n.task_name,
+        inputs: normalizeFormats(n.inputs),
+        outputs: normalizeFormats(n.outputs)
+      }
+    }));
+
+    const newEdges: Edge[] = example.edges.map((e, idx) => {
+      const color = formatColor(e.format_label);
+      return {
+        id: `e-${idx}-${e.source}-${e.target}`,
+        source: e.source,
+        target: e.target,
+        sourceHandle: e.source_handle,
+        targetHandle: e.target_handle,
+        label: e.format_label,
+        style: { stroke: color, strokeWidth: 2 },
+        labelStyle: { fill: color, fontWeight: 600 }
+      };
+    });
+
+    setNodes(newNodes);
+    setEdges(newEdges);
+    setSelectedNodeId(null);
+    setConnectionError("");
+  }
 
   const taskByName = useMemo(
     () => Object.fromEntries(tasks.map((task) => [task.name, task])),
@@ -158,6 +204,30 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
       <aside className="builder-panel">
         <h2>KGpipe Pipeline Editor</h2>
         <p>React Flow prototype for DAG pipeline editing.</p>
+
+        {examples.length > 0 && (
+          <>
+            <label htmlFor="example-select">Load example pipeline</label>
+            <select
+              id="example-select"
+              defaultValue=""
+              onChange={(e) => {
+                if (e.target.value) loadExample(e.target.value);
+                e.target.value = "";
+              }}
+            >
+              <option value="" disabled>
+                — select an example —
+              </option>
+              {examples.map((ex) => (
+                <option key={ex.id} value={ex.id} title={ex.description}>
+                  {ex.name}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+
         <label htmlFor="task-search">Search tasks</label>
         <input
           id="task-search"
