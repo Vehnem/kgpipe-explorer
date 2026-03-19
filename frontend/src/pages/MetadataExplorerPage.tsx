@@ -2,8 +2,10 @@ import cytoscape, { type ElementDefinition } from "cytoscape";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { constructSparql, type TaskSpec } from "../api";
 
-type GraphViewPageProps = {
+type MetadataExplorerPageProps = {
   tasks: TaskSpec[];
+  selectedEntityId: string;
+  onSelectedEntityIdChange: (entityId: string) => void;
 };
 
 type SparqlTerm = {
@@ -176,10 +178,13 @@ WHERE {
   }
 ];
 
-export function GraphViewPage({ tasks }: GraphViewPageProps) {
+export function MetadataExplorerPage({
+  tasks,
+  selectedEntityId,
+  onSelectedEntityIdChange
+}: MetadataExplorerPageProps) {
+  const [query, setQuery] = useState<string>("");
   const [queryText, setQueryText] = useState<string>(EXAMPLE_QUERIES[0].query);
-  const [entitySearch, setEntitySearch] = useState<string>("");
-  const [selectedEntity, setSelectedEntity] = useState<string>("");
   const [queryRunning, setQueryRunning] = useState<boolean>(false);
   const [queryStatus, setQueryStatus] = useState<string>("");
   const [graphElements, setGraphElements] = useState<ElementDefinition[]>([]);
@@ -191,8 +196,8 @@ export function GraphViewPage({ tasks }: GraphViewPageProps) {
   const graphContainerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
 
-  const filteredEntities = useMemo(() => {
-    const q = entitySearch.trim().toLowerCase();
+  const filteredTasks = useMemo(() => {
+    const q = query.trim().toLowerCase();
     if (!q) return tasks;
     return tasks.filter((task) => {
       const haystack = [
@@ -207,15 +212,26 @@ export function GraphViewPage({ tasks }: GraphViewPageProps) {
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [entitySearch, tasks]);
+  }, [query, tasks]);
+
+  useEffect(() => {
+    if (tasks.length === 0) return;
+    if (
+      selectedEntityId &&
+      tasks.some((task) => (task.uri ?? task.name) === selectedEntityId)
+    ) {
+      return;
+    }
+    onSelectedEntityIdChange(tasks[0].uri ?? tasks[0].name);
+  }, [onSelectedEntityIdChange, selectedEntityId, tasks]);
 
   const selectedTask = useMemo(() => {
-    if (selectedEntity) {
-      const match = tasks.find((task) => task.name === selectedEntity);
-      if (match) return match;
+    if (selectedEntityId) {
+      const exact = tasks.find((task) => (task.uri ?? task.name) === selectedEntityId);
+      if (exact) return exact;
     }
-    return filteredEntities[0] ?? null;
-  }, [filteredEntities, selectedEntity, tasks]);
+    return filteredTasks[0] ?? tasks[0] ?? null;
+  }, [filteredTasks, selectedEntityId, tasks]);
 
   useEffect(() => {
     if (!graphContainerRef.current) return;
@@ -303,98 +319,159 @@ export function GraphViewPage({ tasks }: GraphViewPageProps) {
   return (
     <section className="page-scaffold">
       <header className="page-header">
-        <h2>GraphView</h2>
-        <p>Draft layout for querying and visual exploration of PipeKG entities.</p>
+        <h2>Metadata Explorer</h2>
+        <p>
+          Browse task metadata and explore PipeKG entities via SPARQL queries and graph
+          visualization.
+        </p>
       </header>
 
-      <div className="graphview-layout">
-        <div className="graphview-top">
-          <section className="query-panel">
-            <h3>Query</h3>
-            <label htmlFor="example-query-select">Example queries</label>
-            <select
-              id="example-query-select"
-              defaultValue=""
-              onChange={(event) => {
-                const chosen = EXAMPLE_QUERIES.find(
-                  (q) => q.label === event.target.value
-                );
-                if (chosen) setQueryText(chosen.query);
-                event.target.value = "";
-              }}
-            >
-              <option value="" disabled>
-                — select an example —
+      <div className="metadata-explorer-grid">
+        <section className="query-panel">
+          <h3>SPARQL Query</h3>
+          <label htmlFor="example-query-select">Example queries</label>
+          <select
+            id="example-query-select"
+            defaultValue=""
+            onChange={(event) => {
+              const chosen = EXAMPLE_QUERIES.find(
+                (q) => q.label === event.target.value
+              );
+              if (chosen) setQueryText(chosen.query);
+              event.target.value = "";
+            }}
+          >
+            <option value="" disabled>
+              — select an example —
+            </option>
+            {EXAMPLE_QUERIES.map((q) => (
+              <option key={q.label} value={q.label}>
+                {q.label}
               </option>
-              {EXAMPLE_QUERIES.map((q) => (
-                <option key={q.label} value={q.label}>
-                  {q.label}
-                </option>
-              ))}
-            </select>
-            <label htmlFor="graph-query">Query text</label>
-            <textarea
-              id="graph-query"
-              value={queryText}
-              onChange={(event) => setQueryText(event.target.value)}
-              rows={9}
-            />
-            <button type="button" onClick={handleRunQuery} disabled={queryRunning}>
-              {queryRunning ? "Running..." : "Run Query"}
-            </button>
-            {queryStatus ? <p>{queryStatus}</p> : null}
-          </section>
-
-          <section className="graph-panel">
-            <h3>Graph View</h3>
-            <div className="graph-canvas-placeholder">
-              <div ref={graphContainerRef} className="graph-canvas" />
-              {!graphElements.length ? (
-                <div className="graph-empty-state">
-                  <p>Run a SPARQL query to render graph results.</p>
-                </div>
-              ) : null}
-            </div>
-            <p>
-              Selected entity: <strong>{selectedTask?.name ?? "none"}</strong>
-            </p>
-            <p>
-              Triples: {graphStats.triples} {" · "} Nodes: {graphStats.nodes} {" · "} Edges:{" "}
-              {graphStats.edges}
-            </p>
-          </section>
-        </div>
-
-        <section className="graphview-bottom">
-          <div className="search-header">
-            <h3>Entity Search</h3>
-            <span>{filteredEntities.length} results</span>
-          </div>
-          <input
-            type="text"
-            value={entitySearch}
-            placeholder="Search entities by name, IO, method, tool, parameter..."
-            onChange={(event) => setEntitySearch(event.target.value)}
+            ))}
+          </select>
+          <label htmlFor="graph-query">Query text</label>
+          <textarea
+            id="graph-query"
+            value={queryText}
+            onChange={(event) => setQueryText(event.target.value)}
+            rows={9}
           />
-          <div className="graph-entity-list-wrap">
-            <ul className="entity-list">
-              {filteredEntities.map((task) => (
-                <li key={task.name}>
+          <button type="button" onClick={handleRunQuery} disabled={queryRunning}>
+            {queryRunning ? "Running..." : "Run Query"}
+          </button>
+          {queryStatus ? <p>{queryStatus}</p> : null}
+        </section>
+
+        <section className="graph-panel">
+          <h3>Graph</h3>
+          <div className="graph-canvas-placeholder">
+            <div ref={graphContainerRef} className="graph-canvas" />
+            {!graphElements.length ? (
+              <div className="graph-empty-state">
+                <p>Run a SPARQL query to render graph results.</p>
+              </div>
+            ) : null}
+          </div>
+          <p>
+            Triples: {graphStats.triples} {" · "} Nodes: {graphStats.nodes} {" · "} Edges:{" "}
+            {graphStats.edges}
+          </p>
+        </section>
+
+        <aside className="explorer-sidebar">
+          <label htmlFor="kg-search">Search entities</label>
+          <input
+            id="kg-search"
+            type="text"
+            value={query}
+            placeholder="Task, IO format, method, tool, parameter..."
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <div className="explorer-list-meta">{filteredTasks.length} task entities</div>
+          <ul className="entity-list">
+            {filteredTasks.map((task) => {
+              const taskId = task.uri ?? task.name;
+              return (
+                <li key={taskId}>
                   <button
                     type="button"
                     className={
-                      task.name === selectedTask?.name ? "entity-btn selected" : "entity-btn"
+                      taskId === (selectedTask?.uri ?? selectedTask?.name)
+                        ? "entity-btn selected"
+                        : "entity-btn"
                     }
-                    onClick={() => setSelectedEntity(task.name)}
+                    onClick={() => onSelectedEntityIdChange(taskId)}
                   >
                     {task.name}
                   </button>
                 </li>
-              ))}
-            </ul>
-          </div>
-        </section>
+              );
+            })}
+          </ul>
+        </aside>
+
+        <article className="explorer-detail">
+          {selectedTask ? (
+            <>
+              <h3>{selectedTask.name}</h3>
+              <div className="detail-grid">
+                <section>
+                  <h4>Inputs</h4>
+                  <TagList values={selectedTask.inputs} emptyLabel="No declared inputs" />
+                </section>
+                <section>
+                  <h4>Outputs</h4>
+                  <TagList values={selectedTask.outputs} emptyLabel="No declared outputs" />
+                </section>
+                <section>
+                  <h4>Implements Methods</h4>
+                  <TagList
+                    values={selectedTask.implements_method ?? []}
+                    emptyLabel="No methods linked"
+                  />
+                </section>
+                <section>
+                  <h4>Uses Tools</h4>
+                  <TagList
+                    values={selectedTask.uses_tool ?? []}
+                    emptyLabel="No tools linked"
+                  />
+                </section>
+                <section>
+                  <h4>Parameters</h4>
+                  <TagList
+                    values={selectedTask.has_parameter ?? []}
+                    emptyLabel="No parameters linked"
+                  />
+                </section>
+              </div>
+            </>
+          ) : (
+            <p>Select a task entity to inspect details.</p>
+          )}
+        </article>
       </div>
     </section>
+  );
+}
+
+type TagListProps = {
+  values: string[];
+  emptyLabel: string;
+};
+
+function TagList({ values, emptyLabel }: TagListProps) {
+  if (values.length === 0) {
+    return <p className="muted">{emptyLabel}</p>;
+  }
+  return (
+    <div className="tag-list">
+      {values.map((value) => (
+        <span key={value} className="tag">
+          {value}
+        </span>
+      ))}
+    </div>
   );
 }

@@ -907,6 +907,37 @@ body,
   padding: 10px 12px;
 }
 
+.metadata-explorer-grid {
+  margin-top: 14px;
+  border: 1px solid #dbe3ec;
+  border-radius: 10px;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  grid-template-rows: auto auto;
+  background: #fff;
+}
+
+.metadata-explorer-grid .query-panel,
+.metadata-explorer-grid .graph-panel {
+  border-bottom: 1px solid #edf2f7;
+}
+
+.metadata-explorer-grid .query-panel,
+.metadata-explorer-grid .graph-panel,
+.metadata-explorer-grid .explorer-sidebar,
+.metadata-explorer-grid .explorer-detail {
+  min-height: 0;
+}
+
+.metadata-explorer-grid .graph-canvas-placeholder {
+  min-height: 320px;
+}
+
+.metadata-explorer-grid .explorer-sidebar {
+  border-top: none;
+}
+
 .graphview-layout {
   margin-top: 14px;
   border: 1px solid #dbe3ec;

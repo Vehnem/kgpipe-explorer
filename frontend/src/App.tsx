@@ -2,11 +2,10 @@ import { useEffect, useState } from "react";
 import { fetchTasks, type TaskSpec } from "./api";
 import { PipelineBuilderPage } from "./pages/PipelineBuilderPage";
 import { PipelineLeaderboardPage } from "./pages/PipelineLeaderboardPage";
-import { PipeKGExplorerPage } from "./pages/PipeKGExplorerPage";
-import { GraphViewPage } from "./pages/GraphViewPage";
+import { MetadataExplorerPage } from "./pages/MetadataExplorerPage";
 import { ResultsPage } from "./pages/ResultsPage";
 
-type PageId = "builder" | "leaderboard" | "explorer" | "graphview" | "results";
+type PageId = "builder" | "leaderboard" | "explorer" | "results";
 
 export function App() {
   const [tasks, setTasks] = useState<TaskSpec[]>([]);
@@ -62,10 +61,24 @@ export function App() {
         <nav className="page-tabs" aria-label="Explorer pages">
           <button
             type="button"
+            className={activePage === "explorer" ? "active" : ""}
+            onClick={() => navigateToPage("explorer")}
+          >
+            Metadata Explorer
+          </button>
+          <button
+            type="button"
             className={activePage === "builder" ? "active" : ""}
             onClick={() => navigateToPage("builder")}
           >
-            Pipeline Builder
+            Pipeline Editor
+          </button>
+          <button
+            type="button"
+            className={activePage === "results" ? "active" : ""}
+            onClick={() => navigateToPage("results")}
+          >
+            Pipeline Results
           </button>
           <button
             type="button"
@@ -73,27 +86,6 @@ export function App() {
             onClick={() => navigateToPage("leaderboard")}
           >
             Pipeline Leaderboard
-          </button>
-          <button
-            type="button"
-            className={activePage === "explorer" ? "active" : ""}
-            onClick={() => navigateToPage("explorer")}
-          >
-            PipeKG Explorer
-          </button>
-          <button
-            type="button"
-            className={activePage === "graphview" ? "active" : ""}
-            onClick={() => navigateToPage("graphview")}
-          >
-            GraphView
-          </button>
-          <button
-            type="button"
-            className={activePage === "results" ? "active" : ""}
-            onClick={() => navigateToPage("results")}
-          >
-            Results
           </button>
         </nav>
       </header>
@@ -104,17 +96,16 @@ export function App() {
         </main>
       ) : (
         <main className="app-content">
-          {activePage === "builder" && <PipelineBuilderPage tasks={tasks} />}
-          {activePage === "leaderboard" && <PipelineLeaderboardPage tasks={tasks} />}
           {activePage === "explorer" && (
-            <PipeKGExplorerPage
+            <MetadataExplorerPage
               tasks={tasks}
               selectedEntityId={selectedExplorerEntityId}
               onSelectedEntityIdChange={handleExplorerEntityChange}
             />
           )}
-          {activePage === "graphview" && <GraphViewPage tasks={tasks} />}
+          {activePage === "builder" && <PipelineBuilderPage tasks={tasks} />}
           {activePage === "results" && <ResultsPage tasks={tasks} />}
+          {activePage === "leaderboard" && <PipelineLeaderboardPage tasks={tasks} />}
         </main>
       )}
     </div>
@@ -156,7 +147,6 @@ function isPageId(value: string | null): value is PageId {
     value === "builder" ||
     value === "leaderboard" ||
     value === "explorer" ||
-    value === "graphview" ||
     value === "results"
   );
 }
