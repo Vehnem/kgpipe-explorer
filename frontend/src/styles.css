@@ -838,6 +838,13 @@ body,
   gap: 4px;
 }
 
+.entity-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  align-items: stretch;
+}
+
 .entity-btn {
   width: 100%;
   text-align: left;
@@ -851,6 +858,23 @@ body,
 .entity-btn.selected {
   border-color: #2563eb;
   background: #eff6ff;
+}
+
+.entity-insert-btn {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.entity-insert-btn:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
 }
 
 .explorer-detail {
@@ -913,7 +937,7 @@ body,
   border-radius: 10px;
   overflow: hidden;
   display: grid;
-  grid-template-columns: 360px 1fr;
+  grid-template-columns: 360px 8px 1fr;
   grid-template-rows: auto auto;
   background: #fff;
 }
@@ -936,6 +960,25 @@ body,
 
 .metadata-explorer-grid .explorer-sidebar {
   border-top: none;
+}
+
+.metadata-grid-resizer {
+  background: #f1f5f9;
+  border-left: 1px solid #e2e8f0;
+  border-right: 1px solid #e2e8f0;
+  cursor: col-resize;
+}
+
+.metadata-grid-resizer:hover {
+  background: #e2e8f0;
+}
+
+.metadata-explorer-grid.is-resizing {
+  user-select: none;
+}
+
+.metadata-explorer-grid.is-resizing .metadata-grid-resizer {
+  background: #cbd5e1;
 }
 
 .graphview-layout {

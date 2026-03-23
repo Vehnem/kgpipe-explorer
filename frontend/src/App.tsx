@@ -121,10 +121,11 @@ function parseRoute(search: string): RouteState {
   const params = new URLSearchParams(search);
   const pageParam = params.get("page");
   const entityParam = params.get("entity");
-  const page = isPageId(pageParam) ? pageParam : "builder";
+  const parsedEntity = entityParam?.trim() ?? "";
+  const page = isPageId(pageParam) ? pageParam : parsedEntity ? "explorer" : "builder";
   return {
     page,
-    entity: entityParam?.trim() ?? ""
+    entity: parsedEntity
   };
 }
 

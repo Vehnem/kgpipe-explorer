@@ -19,6 +19,36 @@ type GraphStats = {
   edges: number;
 };
 
+type GraphLayoutName = "cose" | "breadthfirst" | "circle" | "grid" | "concentric";
+type DetailViewMode = "entity" | "queryTable";
+
+type QueryTerm = {
+  value: string;
+  type: string;
+};
+
+type QueryTriple = {
+  s: QueryTerm;
+  p: QueryTerm;
+  o: QueryTerm;
+};
+
+type EntityTypeId =
+  | "http://github.com/ScaDS/kgpipe/ontology/Task"
+  | "http://github.com/ScaDS/kgpipe/ontology/TaskRun"
+  | "http://github.com/ScaDS/kgpipe/ontology/Implementation"
+  | "http://github.com/ScaDS/kgpipe/ontology/Metric"
+  | "http://github.com/ScaDS/kgpipe/ontology/MetricRun";
+
+type EntityTypeFilter = "all" | EntityTypeId;
+
+type ExplorerEntity = {
+  id: string;
+  label: string;
+  typeId: EntityTypeId;
+  typeLabel: string;
+};
+
 function isSparqlTerm(term: unknown): term is SparqlTerm {
   if (!term || typeof term !== "object") return false;
   const record = term as Record<string, unknown>;
@@ -33,18 +63,70 @@ function compactLabel(value: string): string {
   return label || value;
 }
 
+function isInternalKgpipeUri(value: string): boolean {
+  return value.startsWith("http://github.com/ScaDS/kgpipe");
+}
+
+function addUriToSubjectValuesClause(currentQuery: string, uri: string): string {
+  const uriToken = `<${uri}>`;
+  const escapedUri = uri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const uriTokenPattern = new RegExp(`<\\s*${escapedUri}\\s*>`, "i");
+  const rawUriPattern = new RegExp(`\\b${escapedUri}\\b`, "i");
+
+  const braceValuesPattern = /(VALUES\s+\?s\s*\{)([\s\S]*?)(\})/i;
+  const parenValuesPattern = /(VALUES\s+\?s\s*\()([\s\S]*?)(\))/i;
+
+  const appendIfMissing = (
+    fullMatch: string,
+    prefix: string,
+    valuesBody: string,
+    suffix: string
+  ): string => {
+    if (uriTokenPattern.test(valuesBody) || rawUriPattern.test(valuesBody)) {
+      return fullMatch;
+    }
+    const trimmed = valuesBody.trim();
+    const separator = trimmed.length > 0 ? " " : "";
+    return `${prefix}${trimmed}${separator}${uriToken}${suffix}`;
+  };
+
+  if (braceValuesPattern.test(currentQuery)) {
+    return currentQuery.replace(
+      braceValuesPattern,
+      (fullMatch, prefix: string, valuesBody: string, suffix: string) =>
+        appendIfMissing(fullMatch, prefix, valuesBody, suffix)
+    );
+  }
+
+  if (parenValuesPattern.test(currentQuery)) {
+    return currentQuery.replace(
+      parenValuesPattern,
+      (fullMatch, prefix: string, valuesBody: string, suffix: string) =>
+        appendIfMissing(fullMatch, prefix, valuesBody, suffix)
+    );
+  }
+
+  const whereMatch = /WHERE\s*\{/i.exec(currentQuery);
+  if (!whereMatch) {
+    return `${currentQuery.trim()}\nWHERE {\n  VALUES ?s { ${uriToken} }\n}`;
+  }
+  const insertIndex = whereMatch.index + whereMatch[0].length;
+  return `${currentQuery.slice(0, insertIndex)}\n  VALUES ?s { ${uriToken} }${currentQuery.slice(insertIndex)}`;
+}
+
 function buildGraphFromResult(result: Record<string, unknown>): {
   elements: ElementDefinition[];
   stats: GraphStats;
+  triples: QueryTriple[];
 } {
   const maybeResults = (result as { results?: unknown }).results;
   if (!maybeResults || typeof maybeResults !== "object") {
-    return { elements: [], stats: { triples: 0, nodes: 0, edges: 0 } };
+    return { elements: [], stats: { triples: 0, nodes: 0, edges: 0 }, triples: [] };
   }
 
   const maybeBindings = (maybeResults as { bindings?: unknown }).bindings;
   if (!Array.isArray(maybeBindings)) {
-    return { elements: [], stats: { triples: 0, nodes: 0, edges: 0 } };
+    return { elements: [], stats: { triples: 0, nodes: 0, edges: 0 }, triples: [] };
   }
 
   const nodeMap = new Map<
@@ -52,6 +134,7 @@ function buildGraphFromResult(result: Record<string, unknown>): {
     { id: string; label: string; value: string; termType: string }
   >();
   const edgeElements: ElementDefinition[] = [];
+  const triples: QueryTriple[] = [];
   let edgeCount = 0;
   let tripleCount = 0;
 
@@ -77,6 +160,11 @@ function buildGraphFromResult(result: Record<string, unknown>): {
     }
 
     tripleCount += 1;
+    triples.push({
+      s: { value: binding.s.value, type: binding.s.type },
+      p: { value: binding.p.value, type: binding.p.type },
+      o: { value: binding.o.value, type: binding.o.type }
+    });
     const sourceId = getNodeId(binding.s);
     const targetId = getNodeId(binding.o);
     edgeElements.push({
@@ -106,7 +194,8 @@ function buildGraphFromResult(result: Record<string, unknown>): {
       triples: tripleCount,
       nodes: nodeElements.length,
       edges: edgeElements.length
-    }
+    },
+    triples
   };
 }
 
@@ -178,6 +267,165 @@ WHERE {
   }
 ];
 
+const ENTITY_TYPES: Array<{ id: EntityTypeId; label: string; prefixed: string }> = [
+  {
+    id: "http://github.com/ScaDS/kgpipe/ontology/Task",
+    label: "Tasks",
+    prefixed: "kgo:Task"
+  },
+  {
+    id: "http://github.com/ScaDS/kgpipe/ontology/TaskRun",
+    label: "Task Runs",
+    prefixed: "kgo:TaskRun"
+  },
+  {
+    id: "http://github.com/ScaDS/kgpipe/ontology/Implementation",
+    label: "Implementations",
+    prefixed: "kgo:Implementation"
+  },
+  {
+    id: "http://github.com/ScaDS/kgpipe/ontology/Metric",
+    label: "Metrics",
+    prefixed: "kgo:Metric"
+  },
+  {
+    id: "http://github.com/ScaDS/kgpipe/ontology/MetricRun",
+    label: "Metric Runs",
+    prefixed: "kgo:MetricRun"
+  }
+];
+
+const ENTITY_TYPE_LABEL_BY_ID: Record<EntityTypeId, string> = {
+  "http://github.com/ScaDS/kgpipe/ontology/Task": "Tasks",
+  "http://github.com/ScaDS/kgpipe/ontology/TaskRun": "Task Runs",
+  "http://github.com/ScaDS/kgpipe/ontology/Implementation": "Implementations",
+  "http://github.com/ScaDS/kgpipe/ontology/Metric": "Metrics",
+  "http://github.com/ScaDS/kgpipe/ontology/MetricRun": "Metric Runs"
+};
+
+const RDF_TYPE_URI = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const RDFS_LABEL_URI = "http://www.w3.org/2000/01/rdf-schema#label";
+
+const ENTITY_DISCOVERY_QUERY = `PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+CONSTRUCT {
+  ?entity a ?type .
+  ?entity rdfs:label ?label .
+}
+WHERE {
+  VALUES ?type {
+    kgo:Task
+    kgo:TaskRun
+    kgo:Implementation
+    kgo:Metric
+    kgo:MetricRun
+  }
+  ?entity a ?type .
+  OPTIONAL { ?entity rdfs:label ?label . }
+}`;
+
+const GRAPH_LAYOUT_OPTIONS: Array<{ value: GraphLayoutName; label: string }> = [
+  { value: "cose", label: "Force-directed (CoSE)" },
+  { value: "breadthfirst", label: "Breadthfirst" },
+  { value: "circle", label: "Circle" },
+  { value: "grid", label: "Grid" },
+  { value: "concentric", label: "Concentric" }
+];
+
+function runLayout(cy: cytoscape.Core, layoutName: GraphLayoutName, dynamicForceLayout: boolean) {
+  const common = {
+    animate: false,
+    fit: true,
+    padding: 24
+  };
+  switch (layoutName) {
+    case "breadthfirst":
+      cy.layout({
+        ...common,
+        name: "breadthfirst",
+        directed: true,
+        spacingFactor: 1.1
+      }).run();
+      return;
+    case "circle":
+      cy.layout({
+        ...common,
+        name: "circle",
+        spacingFactor: 1.15
+      }).run();
+      return;
+    case "grid":
+      cy.layout({
+        ...common,
+        name: "grid",
+        avoidOverlap: true,
+        condense: false
+      }).run();
+      return;
+    case "concentric":
+      cy.layout({
+        ...common,
+        name: "concentric",
+        minNodeSpacing: 30,
+        spacingFactor: 1.1
+      }).run();
+      return;
+    case "cose":
+    default:
+      cy.layout({
+        ...common,
+        name: "cose",
+        animate: dynamicForceLayout,
+        animationDuration: dynamicForceLayout ? 2200 : 0,
+        refresh: dynamicForceLayout ? 20 : 0,
+        randomize: dynamicForceLayout,
+        nodeRepulsion: 4500,
+        idealEdgeLength: 110
+      }).run();
+  }
+}
+
+function isEntityTypeId(value: string): value is EntityTypeId {
+  return ENTITY_TYPES.some((type) => type.id === value);
+}
+
+function buildEntitiesFromConstruct(result: Record<string, unknown>): ExplorerEntity[] {
+  const maybeResults = (result as { results?: unknown }).results;
+  if (!maybeResults || typeof maybeResults !== "object") return [];
+  const maybeBindings = (maybeResults as { bindings?: unknown }).bindings;
+  if (!Array.isArray(maybeBindings)) return [];
+
+  const entityMap = new Map<string, { typeId?: EntityTypeId; label?: string }>();
+  for (const row of maybeBindings) {
+    if (!row || typeof row !== "object") continue;
+    const binding = row as Record<string, unknown>;
+    if (!isSparqlTerm(binding.s) || !isSparqlTerm(binding.p) || !isSparqlTerm(binding.o)) {
+      continue;
+    }
+    const subjectId = binding.s.value;
+    const record = entityMap.get(subjectId) ?? {};
+    if (binding.p.value === RDF_TYPE_URI && binding.o.type === "uri" && isEntityTypeId(binding.o.value)) {
+      record.typeId = binding.o.value;
+    }
+    if (binding.p.value === RDFS_LABEL_URI && binding.o.type === "literal") {
+      record.label = binding.o.value;
+    }
+    entityMap.set(subjectId, record);
+  }
+
+  const entities: ExplorerEntity[] = [];
+  for (const [id, record] of entityMap.entries()) {
+    if (!record.typeId) continue;
+    entities.push({
+      id,
+      label: record.label?.trim() || compactLabel(id),
+      typeId: record.typeId,
+      typeLabel: ENTITY_TYPE_LABEL_BY_ID[record.typeId]
+    });
+  }
+  return entities.sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export function MetadataExplorerPage({
   tasks,
   selectedEntityId,
@@ -193,45 +441,84 @@ export function MetadataExplorerPage({
     nodes: 0,
     edges: 0
   });
+  const [queryTriples, setQueryTriples] = useState<QueryTriple[]>([]);
+  const [graphLayout, setGraphLayout] = useState<GraphLayoutName>("cose");
+  const [dynamicForceLayout, setDynamicForceLayout] = useState<boolean>(false);
+  const [detailViewMode, setDetailViewMode] = useState<DetailViewMode>("entity");
+  const [entityTypeFilter, setEntityTypeFilter] = useState<EntityTypeFilter>("all");
+  const [entities, setEntities] = useState<ExplorerEntity[]>([]);
+  const [entityStatus, setEntityStatus] = useState<string>("");
+  const [leftColumnWidth, setLeftColumnWidth] = useState<number>(360);
+  const [isResizingColumns, setIsResizingColumns] = useState<boolean>(false);
+  const gridRef = useRef<HTMLDivElement | null>(null);
   const graphContainerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
+  const activeLayoutRef = useRef<cytoscape.Layouts | null>(null);
 
-  const filteredTasks = useMemo(() => {
+  const filteredEntities = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return tasks;
-    return tasks.filter((task) => {
-      const haystack = [
-        task.name,
-        task.inputs.join(" "),
-        task.outputs.join(" "),
-        (task.implements_method ?? []).join(" "),
-        (task.uses_tool ?? []).join(" "),
-        (task.has_parameter ?? []).join(" ")
-      ]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
+    return entities.filter((entity) => {
+      if (entityTypeFilter !== "all" && entity.typeId !== entityTypeFilter) {
+        return false;
+      }
+      if (!q) return true;
+      return `${entity.label} ${entity.id} ${entity.typeLabel}`.toLowerCase().includes(q);
     });
-  }, [query, tasks]);
+  }, [entities, entityTypeFilter, query]);
+
+  const groupedFilteredEntities = useMemo(() => {
+    return ENTITY_TYPES.map((type) => ({
+      ...type,
+      entities: filteredEntities.filter((entity) => entity.typeId === type.id)
+    })).filter((group) => group.entities.length > 0);
+  }, [filteredEntities]);
 
   useEffect(() => {
-    if (tasks.length === 0) return;
-    if (
-      selectedEntityId &&
-      tasks.some((task) => (task.uri ?? task.name) === selectedEntityId)
-    ) {
-      return;
+    let cancelled = false;
+    async function loadEntities() {
+      setEntityStatus("");
+      try {
+        const result = await constructSparql(ENTITY_DISCOVERY_QUERY);
+        const discoveredEntities = buildEntitiesFromConstruct(result);
+        if (cancelled) return;
+        setEntities(discoveredEntities);
+        if (!discoveredEntities.length) {
+          setEntityStatus("No typed entities found for the configured kgo:* classes.");
+        }
+      } catch (error) {
+        if (cancelled) return;
+        const message =
+          error instanceof Error ? error.message : "Unknown error while loading entities.";
+        setEntityStatus(`Entity discovery failed: ${message}`);
+      }
     }
-    onSelectedEntityIdChange(tasks[0].uri ?? tasks[0].name);
-  }, [onSelectedEntityIdChange, selectedEntityId, tasks]);
+    void loadEntities();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!entities.length) return;
+    if (selectedEntityId) return;
+    const fallback = filteredEntities[0] ?? entities[0];
+    if (fallback) {
+      onSelectedEntityIdChange(fallback.id);
+    }
+  }, [entities, filteredEntities, onSelectedEntityIdChange, selectedEntityId]);
 
   const selectedTask = useMemo(() => {
     if (selectedEntityId) {
       const exact = tasks.find((task) => (task.uri ?? task.name) === selectedEntityId);
       if (exact) return exact;
     }
-    return filteredTasks[0] ?? tasks[0] ?? null;
-  }, [filteredTasks, selectedEntityId, tasks]);
+    return null;
+  }, [selectedEntityId, tasks]);
+
+  const selectedEntity = useMemo(() => {
+    if (!selectedEntityId) return null;
+    return entities.find((entity) => entity.id === selectedEntityId) ?? null;
+  }, [entities, selectedEntityId]);
 
   useEffect(() => {
     if (!graphContainerRef.current) return;
@@ -279,27 +566,109 @@ export function MetadataExplorerPage({
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
+    activeLayoutRef.current?.stop();
     cy.elements().remove();
     if (!graphElements.length) return;
     cy.add(graphElements);
-    cy.layout({
-      name: "cose",
-      animate: false,
-      fit: true,
-      padding: 24,
-      nodeRepulsion: 4500,
-      idealEdgeLength: 110
-    }).run();
-  }, [graphElements]);
+    const layout = cy.layout(
+      graphLayout === "cose"
+        ? {
+            name: "cose",
+            animate: dynamicForceLayout,
+            animationDuration: dynamicForceLayout ? 2200 : 0,
+            refresh: dynamicForceLayout ? 20 : 0,
+            randomize: dynamicForceLayout,
+            fit: true,
+            padding: 24,
+            nodeRepulsion: 4500,
+            idealEdgeLength: 110
+          }
+        : graphLayout === "breadthfirst"
+          ? {
+              name: "breadthfirst",
+              animate: false,
+              fit: true,
+              padding: 24,
+              directed: true,
+              spacingFactor: 1.1
+            }
+          : graphLayout === "circle"
+            ? {
+                name: "circle",
+                animate: false,
+                fit: true,
+                padding: 24,
+                spacingFactor: 1.15
+              }
+            : graphLayout === "grid"
+              ? {
+                  name: "grid",
+                  animate: false,
+                  fit: true,
+                  padding: 24,
+                  avoidOverlap: true,
+                  condense: false
+                }
+              : {
+                  name: "concentric",
+                  animate: false,
+                  fit: true,
+                  padding: 24,
+                  minNodeSpacing: 30,
+                  spacingFactor: 1.1
+                }
+    );
+    activeLayoutRef.current = layout;
+    layout.run();
+  }, [dynamicForceLayout, graphElements, graphLayout]);
+
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    if (graphLayout !== "cose" || !dynamicForceLayout) return;
+
+    const rerunForceLayout = () => {
+      if (!cy.elements().length) return;
+      activeLayoutRef.current?.stop();
+      const layout = cy.layout({
+        name: "cose",
+        animate: true,
+        animationDuration: 650,
+        refresh: 20,
+        randomize: false,
+        fit: false,
+        padding: 24,
+        nodeRepulsion: 4500,
+        idealEdgeLength: 110
+      });
+      activeLayoutRef.current = layout;
+      layout.run();
+    };
+
+    cy.on("dragfree", "node", rerunForceLayout);
+    return () => {
+      cy.off("dragfree", "node", rerunForceLayout);
+    };
+  }, [dynamicForceLayout, graphLayout]);
+
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.resize();
+    if (graphElements.length) {
+      cy.fit(undefined, 24);
+    }
+  }, [graphElements.length, leftColumnWidth]);
 
   async function handleRunQuery() {
     setQueryRunning(true);
     setQueryStatus("");
     try {
       const result = await constructSparql(queryText);
-      const { elements, stats } = buildGraphFromResult(result);
+      const { elements, stats, triples } = buildGraphFromResult(result);
       setGraphElements(elements);
       setGraphStats(stats);
+      setQueryTriples(triples);
       setQueryStatus(
         stats.triples
           ? `Query completed. Parsed ${stats.triples} triples into ${stats.nodes} nodes and ${stats.edges} edges.`
@@ -308,12 +677,51 @@ export function MetadataExplorerPage({
     } catch (error) {
       setGraphElements([]);
       setGraphStats({ triples: 0, nodes: 0, edges: 0 });
+      setQueryTriples([]);
       const message =
         error instanceof Error ? error.message : "Unknown error while running query.";
       setQueryStatus(`Query failed: ${message}`);
     } finally {
       setQueryRunning(false);
     }
+  }
+
+  function handleAddEntityToQuery(entityId: string) {
+    setQueryText((previous) => addUriToSubjectValuesClause(previous, entityId));
+  }
+
+  function startColumnResize(event: React.PointerEvent<HTMLDivElement>) {
+    const container = gridRef.current;
+    if (!container) return;
+    event.preventDefault();
+    setIsResizingColumns(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+
+    const containerRect = container.getBoundingClientRect();
+    const minLeft = 260;
+    const minRight = 320;
+    const maxLeft = Math.max(minLeft, containerRect.width - minRight);
+
+    const updateFromClientX = (clientX: number) => {
+      const next = clientX - containerRect.left;
+      const clamped = Math.min(maxLeft, Math.max(minLeft, next));
+      setLeftColumnWidth(clamped);
+    };
+
+    updateFromClientX(event.clientX);
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      updateFromClientX(moveEvent.clientX);
+    };
+
+    const stopResize = () => {
+      setIsResizingColumns(false);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", stopResize);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", stopResize);
   }
 
   return (
@@ -326,8 +734,12 @@ export function MetadataExplorerPage({
         </p>
       </header>
 
-      <div className="metadata-explorer-grid">
-        <section className="query-panel">
+      <div
+        ref={gridRef}
+        className={`metadata-explorer-grid${isResizingColumns ? " is-resizing" : ""}`}
+        style={{ gridTemplateColumns: `${leftColumnWidth}px 8px minmax(0, 1fr)` }}
+      >
+        <section className="query-panel" style={{ gridColumn: 1, gridRow: 1 }}>
           <h3>SPARQL Query</h3>
           <label htmlFor="example-query-select">Example queries</label>
           <select
@@ -363,8 +775,39 @@ export function MetadataExplorerPage({
           {queryStatus ? <p>{queryStatus}</p> : null}
         </section>
 
-        <section className="graph-panel">
+        <div
+          className="metadata-grid-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize query and graph panels"
+          onPointerDown={startColumnResize}
+          style={{ gridColumn: 2, gridRow: "1 / span 2" }}
+        />
+
+        <section className="graph-panel" style={{ gridColumn: 3, gridRow: 1 }}>
           <h3>Graph</h3>
+          <label htmlFor="graph-layout-select">Layout</label>
+          <select
+            id="graph-layout-select"
+            value={graphLayout}
+            onChange={(event) => setGraphLayout(event.target.value as GraphLayoutName)}
+          >
+            {GRAPH_LAYOUT_OPTIONS.map((layout) => (
+              <option key={layout.value} value={layout.value}>
+                {layout.label}
+              </option>
+            ))}
+          </select>
+          {graphLayout === "cose" ? (
+            <label>
+              <input
+                type="checkbox"
+                checked={dynamicForceLayout}
+                onChange={(event) => setDynamicForceLayout(event.target.checked)}
+              />{" "}
+              Dynamic force layout
+            </label>
+          ) : null}
           <div className="graph-canvas-placeholder">
             <div ref={graphContainerRef} className="graph-canvas" />
             {!graphElements.length ? (
@@ -379,80 +822,211 @@ export function MetadataExplorerPage({
           </p>
         </section>
 
-        <aside className="explorer-sidebar">
+        <aside className="explorer-sidebar" style={{ gridColumn: 1, gridRow: 2 }}>
           <label htmlFor="kg-search">Search entities</label>
           <input
             id="kg-search"
             type="text"
             value={query}
-            placeholder="Task, IO format, method, tool, parameter..."
+            placeholder="Entity label or URI..."
             onChange={(event) => setQuery(event.target.value)}
           />
-          <div className="explorer-list-meta">{filteredTasks.length} task entities</div>
-          <ul className="entity-list">
-            {filteredTasks.map((task) => {
-              const taskId = task.uri ?? task.name;
-              return (
-                <li key={taskId}>
-                  <button
-                    type="button"
-                    className={
-                      taskId === (selectedTask?.uri ?? selectedTask?.name)
-                        ? "entity-btn selected"
-                        : "entity-btn"
-                    }
-                    onClick={() => onSelectedEntityIdChange(taskId)}
-                  >
-                    {task.name}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <label htmlFor="entity-type-filter">Entity type</label>
+          <select
+            id="entity-type-filter"
+            value={entityTypeFilter}
+            onChange={(event) => setEntityTypeFilter(event.target.value as EntityTypeFilter)}
+          >
+            <option value="all">All supported types</option>
+            {ENTITY_TYPES.map((type) => (
+              <option key={type.id} value={type.id}>
+                {type.prefixed}
+              </option>
+            ))}
+          </select>
+          <div className="explorer-list-meta">{filteredEntities.length} entities</div>
+          {entityStatus ? <p className="muted">{entityStatus}</p> : null}
+          {groupedFilteredEntities.map((group) => (
+            <section key={group.id}>
+              <h4>{group.prefixed}</h4>
+              <ul className="entity-list">
+                {group.entities.map((entity) => (
+                  <li key={entity.id}>
+                    <div className="entity-row">
+                      <button
+                        type="button"
+                        className={entity.id === selectedEntityId ? "entity-btn selected" : "entity-btn"}
+                        onClick={() => onSelectedEntityIdChange(entity.id)}
+                      >
+                        {entity.label}
+                      </button>
+                      <button
+                        type="button"
+                        className="entity-insert-btn"
+                        onClick={() => handleAddEntityToQuery(entity.id)}
+                        title="Add this entity URI to VALUES ?s"
+                        aria-label={`Add ${entity.label} to VALUES ?s in query`}
+                      >
+                        + VALUES ?s
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
         </aside>
 
-        <article className="explorer-detail">
-          {selectedTask ? (
-            <>
-              <h3>{selectedTask.name}</h3>
-              <div className="detail-grid">
-                <section>
-                  <h4>Inputs</h4>
-                  <TagList values={selectedTask.inputs} emptyLabel="No declared inputs" />
-                </section>
-                <section>
-                  <h4>Outputs</h4>
-                  <TagList values={selectedTask.outputs} emptyLabel="No declared outputs" />
-                </section>
-                <section>
-                  <h4>Implements Methods</h4>
-                  <TagList
-                    values={selectedTask.implements_method ?? []}
-                    emptyLabel="No methods linked"
-                  />
-                </section>
-                <section>
-                  <h4>Uses Tools</h4>
-                  <TagList
-                    values={selectedTask.uses_tool ?? []}
-                    emptyLabel="No tools linked"
-                  />
-                </section>
-                <section>
-                  <h4>Parameters</h4>
-                  <TagList
-                    values={selectedTask.has_parameter ?? []}
-                    emptyLabel="No parameters linked"
-                  />
-                </section>
-              </div>
-            </>
+        <article className="explorer-detail" style={{ gridColumn: 3, gridRow: 2 }}>
+          <nav className="page-tabs" aria-label="Detail view switch">
+            <button
+              type="button"
+              className={detailViewMode === "entity" ? "active" : ""}
+              onClick={() => setDetailViewMode("entity")}
+            >
+              Entity view
+            </button>
+            <button
+              type="button"
+              className={detailViewMode === "queryTable" ? "active" : ""}
+              onClick={() => setDetailViewMode("queryTable")}
+            >
+              Query result table
+            </button>
+          </nav>
+
+          {detailViewMode === "entity" ? (
+            selectedTask ? (
+              <>
+                <h3>{selectedTask.name}</h3>
+                <div className="detail-grid">
+                  <section>
+                    <h4>Inputs</h4>
+                    <TagList values={selectedTask.inputs} emptyLabel="No declared inputs" />
+                  </section>
+                  <section>
+                    <h4>Outputs</h4>
+                    <TagList values={selectedTask.outputs} emptyLabel="No declared outputs" />
+                  </section>
+                  <section>
+                    <h4>Implements Methods</h4>
+                    <TagList
+                      values={selectedTask.implements_method ?? []}
+                      emptyLabel="No methods linked"
+                    />
+                  </section>
+                  <section>
+                    <h4>Uses Tools</h4>
+                    <TagList
+                      values={selectedTask.uses_tool ?? []}
+                      emptyLabel="No tools linked"
+                    />
+                  </section>
+                  <section>
+                    <h4>Parameters</h4>
+                    <TagList
+                      values={selectedTask.has_parameter ?? []}
+                      emptyLabel="No parameters linked"
+                    />
+                  </section>
+                </div>
+              </>
+            ) : selectedEntity ? (
+              <>
+                <h3>{selectedEntity.label}</h3>
+                <p>
+                  <strong>Type:</strong> {ENTITY_TYPES.find((t) => t.id === selectedEntity.typeId)?.prefixed}
+                </p>
+                <p>
+                  <strong>URI:</strong> {selectedEntity.id}
+                </p>
+              </>
+            ) : (
+              <p>Select an entity to inspect details.</p>
+            )
           ) : (
-            <p>Select a task entity to inspect details.</p>
+            <>
+              <h3>Construct Query Result</h3>
+              {queryTriples.length ? (
+                <div style={{ overflowX: "auto" }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Subject</th>
+                        <th>Predicate</th>
+                        <th>Object</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {queryTriples.map((triple, index) => (
+                        <tr
+                          key={`${triple.s.value}|${triple.p.value}|${triple.o.value}|${index}`}
+                        >
+                          <td>
+                            <QueryTermCell
+                              term={triple.s}
+                              onSelectEntity={(entityId) => {
+                                onSelectedEntityIdChange(entityId);
+                                setDetailViewMode("entity");
+                              }}
+                            />
+                          </td>
+                          <td>
+                            <QueryTermCell
+                              term={triple.p}
+                              onSelectEntity={(entityId) => {
+                                onSelectedEntityIdChange(entityId);
+                                setDetailViewMode("entity");
+                              }}
+                            />
+                          </td>
+                          <td>
+                            <QueryTermCell
+                              term={triple.o}
+                              onSelectEntity={(entityId) => {
+                                onSelectedEntityIdChange(entityId);
+                                setDetailViewMode("entity");
+                              }}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p>Run a CONSTRUCT query to populate the result table.</p>
+              )}
+            </>
           )}
         </article>
       </div>
     </section>
+  );
+}
+
+type QueryTermCellProps = {
+  term: QueryTerm;
+  onSelectEntity: (entityId: string) => void;
+};
+
+function QueryTermCell({ term, onSelectEntity }: QueryTermCellProps) {
+  if (term.type !== "uri") {
+    return <span>{term.value}</span>;
+  }
+
+  if (isInternalKgpipeUri(term.value)) {
+    return (
+      <button type="button" className="entity-btn" onClick={() => onSelectEntity(term.value)}>
+        {term.value}
+      </button>
+    );
+  }
+
+  return (
+    <a href={term.value} target="_blank" rel="noopener noreferrer">
+      {term.value}
+    </a>
   );
 }
 
