@@ -1,6 +1,9 @@
 import cytoscape, { type ElementDefinition } from "cytoscape";
+import cola from "cytoscape-cola";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { constructSparql, type TaskSpec } from "../api";
+
+cytoscape.use(cola);
 
 type MetadataExplorerPageProps = {
   tasks: TaskSpec[];
@@ -333,55 +336,45 @@ const GRAPH_LAYOUT_OPTIONS: Array<{ value: GraphLayoutName; label: string }> = [
 ];
 
 function runLayout(cy: cytoscape.Core, layoutName: GraphLayoutName, dynamicForceLayout: boolean) {
-  const common = {
-    animate: false,
-    fit: true,
-    padding: 24
-  };
+  const common = { fit: true, padding: 24 };
   switch (layoutName) {
     case "breadthfirst":
-      cy.layout({
-        ...common,
-        name: "breadthfirst",
-        directed: true,
-        spacingFactor: 1.1
-      }).run();
+      cy.layout({ ...common, name: "breadthfirst", animate: false, directed: true, spacingFactor: 1.1 }).run();
       return;
     case "circle":
-      cy.layout({
-        ...common,
-        name: "circle",
-        spacingFactor: 1.15
-      }).run();
+      cy.layout({ ...common, name: "circle", animate: false, spacingFactor: 1.15 }).run();
       return;
     case "grid":
-      cy.layout({
-        ...common,
-        name: "grid",
-        avoidOverlap: true,
-        condense: false
-      }).run();
+      cy.layout({ ...common, name: "grid", animate: false, avoidOverlap: true, condense: false }).run();
       return;
     case "concentric":
-      cy.layout({
-        ...common,
-        name: "concentric",
-        minNodeSpacing: 30,
-        spacingFactor: 1.1
-      }).run();
+      cy.layout({ ...common, name: "concentric", animate: false, minNodeSpacing: 30, spacingFactor: 1.1 }).run();
       return;
     case "cose":
     default:
-      cy.layout({
-        ...common,
-        name: "cose",
-        animate: dynamicForceLayout,
-        animationDuration: dynamicForceLayout ? 2200 : 0,
-        refresh: dynamicForceLayout ? 20 : 0,
-        randomize: dynamicForceLayout,
-        nodeRepulsion: 4500,
-        idealEdgeLength: 110
-      }).run();
+      if (dynamicForceLayout) {
+        cy.layout({
+          ...common,
+          name: "cola",
+          animate: true,
+          infinite: true,
+          randomize: true,
+          avoidOverlap: true,
+          edgeLength: 160,
+          nodeSpacing: 35
+        } as cytoscape.LayoutOptions).run();
+      } else {
+        cy.layout({
+          ...common,
+          name: "cose",
+          animate: false,
+          randomize: true,
+          nodeRepulsion: 400000,
+          idealEdgeLength: 100,
+          gravity: 0.25,
+          numIter: 1000
+        }).run();
+      }
   }
 }
 
@@ -567,89 +560,52 @@ export function MetadataExplorerPage({
     const cy = cyRef.current;
     if (!cy) return;
     activeLayoutRef.current?.stop();
+    cy.nodes().unlock();
     cy.elements().remove();
     if (!graphElements.length) return;
     cy.add(graphElements);
-    const layout = cy.layout(
-      graphLayout === "cose"
-        ? {
-            name: "cose",
-            animate: dynamicForceLayout,
-            animationDuration: dynamicForceLayout ? 2200 : 0,
-            refresh: dynamicForceLayout ? 20 : 0,
-            randomize: dynamicForceLayout,
-            fit: true,
-            padding: 24,
-            nodeRepulsion: 4500,
-            idealEdgeLength: 110
-          }
-        : graphLayout === "breadthfirst"
-          ? {
-              name: "breadthfirst",
-              animate: false,
-              fit: true,
-              padding: 24,
-              directed: true,
-              spacingFactor: 1.1
-            }
-          : graphLayout === "circle"
-            ? {
-                name: "circle",
-                animate: false,
-                fit: true,
-                padding: 24,
-                spacingFactor: 1.15
-              }
-            : graphLayout === "grid"
-              ? {
-                  name: "grid",
-                  animate: false,
-                  fit: true,
-                  padding: 24,
-                  avoidOverlap: true,
-                  condense: false
-                }
-              : {
-                  name: "concentric",
-                  animate: false,
-                  fit: true,
-                  padding: 24,
-                  minNodeSpacing: 30,
-                  spacingFactor: 1.1
-                }
-    );
+
+    const common = { fit: true, padding: 24 };
+    let layoutOpts: cytoscape.LayoutOptions;
+
+    if (graphLayout === "cose") {
+      if (dynamicForceLayout) {
+        layoutOpts = {
+          ...common,
+          name: "cola",
+          animate: true,
+          infinite: true,
+          randomize: true,
+          avoidOverlap: true,
+          edgeLength: 160,
+          nodeSpacing: 35
+        } as cytoscape.LayoutOptions;
+      } else {
+        layoutOpts = {
+          ...common,
+          name: "cose",
+          animate: false,
+          randomize: true,
+          nodeRepulsion: 400000,
+          idealEdgeLength: 100,
+          gravity: 0.25,
+          numIter: 1000
+        };
+      }
+    } else if (graphLayout === "breadthfirst") {
+      layoutOpts = { ...common, name: "breadthfirst", animate: false, directed: true, spacingFactor: 1.1 };
+    } else if (graphLayout === "circle") {
+      layoutOpts = { ...common, name: "circle", animate: false, spacingFactor: 1.15 };
+    } else if (graphLayout === "grid") {
+      layoutOpts = { ...common, name: "grid", animate: false, avoidOverlap: true, condense: false };
+    } else {
+      layoutOpts = { ...common, name: "concentric", animate: false, minNodeSpacing: 30, spacingFactor: 1.1 };
+    }
+
+    const layout = cy.layout(layoutOpts);
     activeLayoutRef.current = layout;
     layout.run();
   }, [dynamicForceLayout, graphElements, graphLayout]);
-
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    if (graphLayout !== "cose" || !dynamicForceLayout) return;
-
-    const rerunForceLayout = () => {
-      if (!cy.elements().length) return;
-      activeLayoutRef.current?.stop();
-      const layout = cy.layout({
-        name: "cose",
-        animate: true,
-        animationDuration: 650,
-        refresh: 20,
-        randomize: false,
-        fit: false,
-        padding: 24,
-        nodeRepulsion: 4500,
-        idealEdgeLength: 110
-      });
-      activeLayoutRef.current = layout;
-      layout.run();
-    };
-
-    cy.on("dragfree", "node", rerunForceLayout);
-    return () => {
-      cy.off("dragfree", "node", rerunForceLayout);
-    };
-  }, [dynamicForceLayout, graphLayout]);
 
   useEffect(() => {
     const cy = cyRef.current;
