@@ -6,13 +6,15 @@ from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from kgpipe.common.definitions import ImplementationEntity
-from kgpipe.common.systemgraph import PipeKG
+from kgpipe.common.graph.definitions import ImplementationEntity
+from kgpipe.common.graph.systemgraph import PipeKG
 from typing import List
 from typing import Optional
 
 import csv
 import hashlib
+import sqlite3
+from datetime import datetime, timezone
 
 class TaskImplSpec(BaseModel):
     uri: Optional[str] = None
@@ -43,24 +45,18 @@ app.add_middleware(
 
 def _load_task_specs() -> dict[str, TaskImplSpec]:
     pipekg = PipeKG()
-    implementations: List[ImplementationEntity] = pipekg.list_taskImplementations()
+    # implementations: List[ImplementationEntity] = pipekg.find_implementations()
+    # task_specs: dict[str, TaskImplSpec] = {implementation.name: TaskImplSpec(
+    #     uri=str(implementation.uri),
+    #     name=implementation.name,
+    #     inputs=sorted(implementation.input_spec),
+    #     outputs=sorted(implementation.output_spec),
+    #     implements_method=sorted(set(implementation.implementsMethod)),
+    #     uses_tool=sorted(set(implementation.usesTool)),
+    #     has_parameter=sorted(set(implementation.hasParameter)),
+    # ) for implementation in implementations}
 
-    task_specs: dict[str, TaskImplSpec] = {}
-    for implementation in implementations:
-        task_name = implementation.name
-        input_formats = {str(fmt) for fmt in implementation.input_spec}
-        output_formats = {str(fmt) for fmt in implementation.output_spec}
-        task_specs[task_name] = TaskImplSpec(
-            uri=str(implementation.uri),
-            name=task_name,
-            inputs=sorted(input_formats),
-            outputs=sorted(output_formats),
-            implements_method=sorted(set(implementation.implementsMethod)),
-            uses_tool=sorted(set(implementation.usesTool)),
-            has_parameter=sorted(set(implementation.hasParameter)),
-        )
-
-    return task_specs
+    return {}
 
 
 @app.get("/health")
@@ -95,6 +91,68 @@ from fastapi import Body
 def construct_sparql(query: str = Body(..., embed=True)) -> dict[str, object]:
     result = PipeKG.sparql_construct(query)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Saved SPARQL query examples (sqlite)
+# ---------------------------------------------------------------------------
+
+SAVED_QUERIES_DB_PATH = Path(__file__).resolve().parent / "saved_queries.sqlite"
+
+
+class SavedSparqlExample(BaseModel):
+    label: str
+    query: str
+
+
+def _get_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(SAVED_QUERIES_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sparql_examples (
+            label TEXT PRIMARY KEY,
+            query TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    return conn
+
+
+@app.get("/sparql/examples", response_model=list[SavedSparqlExample])
+def list_saved_sparql_examples() -> list[SavedSparqlExample]:
+    with _get_db() as conn:
+        rows = conn.execute(
+            "SELECT label, query FROM sparql_examples ORDER BY created_at DESC, label ASC"
+        ).fetchall()
+    return [SavedSparqlExample(label=row["label"], query=row["query"]) for row in rows]
+
+
+@app.post("/sparql/examples", response_model=SavedSparqlExample)
+def save_sparql_example(example: SavedSparqlExample) -> SavedSparqlExample:
+    label = example.label.strip()
+    query = example.query.strip()
+    if not label:
+        raise HTTPException(status_code=400, detail="label must not be empty")
+    if not query:
+        raise HTTPException(status_code=400, detail="query must not be empty")
+
+    created_at = datetime.now(timezone.utc).isoformat()
+    with _get_db() as conn:
+        conn.execute(
+            """
+            INSERT INTO sparql_examples(label, query, created_at)
+            VALUES(?, ?, ?)
+            ON CONFLICT(label) DO UPDATE SET
+                query=excluded.query,
+                created_at=excluded.created_at
+            """
+            ,
+            (label, query, created_at),
+        )
+        conn.commit()
+    return SavedSparqlExample(label=label, query=query)
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +258,101 @@ _EXAMPLE_PIPELINES: list[ExamplePipeline] = [
             ),
             ExamplePipelineEdge(
                 source="n-linker",
+                target="n-kg-sink",
+                source_handle="out:ttl",
+                target_handle="in:any",
+                format_label="ttl",
+            ),
+        ],
+    ),
+    ExamplePipeline(
+        id="example_pdf_to_kg",
+        name="PDF → KG",
+        description=(
+            "A PDF document is converted to Markdown, then processed in "
+            "parallel by a content extractor and a metadata extractor. "
+            "Both extraction branches produce Turtle triples that are "
+            "collected into a knowledge graph."
+        ),
+        nodes=[
+            ExamplePipelineNode(
+                id="n-pdf-src",
+                task_name="PDF",
+                inputs=[],
+                outputs=[],
+                position_x=20,
+                position_y=200,
+                node_type="dataNode",
+                format="pdf",
+                data_kind="source",
+            ),
+            ExamplePipelineNode(
+                id="n-pdf2md",
+                task_name="PDFtoMarkdown",
+                inputs=["pdf"],
+                outputs=["md"],
+                position_x=220,
+                position_y=200,
+            ),
+            ExamplePipelineNode(
+                id="n-content-ext",
+                task_name="ContentExtractor",
+                inputs=["md"],
+                outputs=["ttl"],
+                position_x=480,
+                position_y=100,
+            ),
+            ExamplePipelineNode(
+                id="n-meta-ext",
+                task_name="MetadataExtractor",
+                inputs=["md"],
+                outputs=["ttl"],
+                position_x=480,
+                position_y=300,
+            ),
+            ExamplePipelineNode(
+                id="n-kg-sink",
+                task_name="KG",
+                inputs=[],
+                outputs=[],
+                position_x=740,
+                position_y=200,
+                node_type="dataNode",
+                format="ttl",
+                data_kind="sink",
+            ),
+        ],
+        edges=[
+            ExamplePipelineEdge(
+                source="n-pdf-src",
+                target="n-pdf2md",
+                source_handle="out:pdf",
+                target_handle="in:pdf",
+                format_label="pdf",
+            ),
+            ExamplePipelineEdge(
+                source="n-pdf2md",
+                target="n-content-ext",
+                source_handle="out:md",
+                target_handle="in:md",
+                format_label="md",
+            ),
+            ExamplePipelineEdge(
+                source="n-pdf2md",
+                target="n-meta-ext",
+                source_handle="out:md",
+                target_handle="in:md",
+                format_label="md",
+            ),
+            ExamplePipelineEdge(
+                source="n-content-ext",
+                target="n-kg-sink",
+                source_handle="out:ttl",
+                target_handle="in:any",
+                format_label="ttl",
+            ),
+            ExamplePipelineEdge(
+                source="n-meta-ext",
                 target="n-kg-sink",
                 source_handle="out:ttl",
                 target_handle="in:any",

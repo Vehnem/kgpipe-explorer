@@ -10,6 +10,11 @@ export type TaskSpec = {
 
 export type SparqlConstructResponse = Record<string, unknown>;
 
+export type SavedSparqlExample = {
+  label: string;
+  query: string;
+};
+
 export type ArtifactFile = {
   name: string;
   description: string;
@@ -75,6 +80,30 @@ export async function constructSparql(
     throw new Error(`Failed to run SPARQL construct (${res.status})`);
   }
   return (await res.json()) as SparqlConstructResponse;
+}
+
+export async function fetchSavedSparqlExamples(): Promise<SavedSparqlExample[]> {
+  const res = await fetch(`${API_BASE}/sparql/examples`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch saved SPARQL examples (${res.status})`);
+  }
+  return (await res.json()) as SavedSparqlExample[];
+}
+
+export async function saveSparqlExample(payload: SavedSparqlExample): Promise<SavedSparqlExample> {
+  const res = await fetch(`${API_BASE}/sparql/examples`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const maybe = (await res.json().catch(() => null)) as { detail?: unknown } | null;
+    const detail = typeof maybe?.detail === "string" ? `: ${maybe.detail}` : "";
+    throw new Error(`Failed to save SPARQL example (${res.status})${detail}`);
+  }
+  return (await res.json()) as SavedSparqlExample;
 }
 
 export async function fetchLeaderboardRunsTsv(): Promise<string> {

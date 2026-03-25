@@ -1,7 +1,13 @@
 import cytoscape, { type ElementDefinition } from "cytoscape";
 import cola from "cytoscape-cola";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { constructSparql, type TaskSpec } from "../api";
+import {
+  constructSparql,
+  fetchSavedSparqlExamples,
+  saveSparqlExample,
+  type SavedSparqlExample,
+  type TaskSpec
+} from "../api";
 
 cytoscape.use(cola);
 
@@ -207,7 +213,7 @@ type ExampleQuery = {
   query: string;
 };
 
-const EXAMPLE_QUERIES: ExampleQuery[] = [
+const BUILTIN_EXAMPLE_QUERIES: ExampleQuery[] = [
   {
     label: "All triples (sample, limit 20)",
     query: "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 20"
@@ -425,10 +431,13 @@ export function MetadataExplorerPage({
   onSelectedEntityIdChange
 }: MetadataExplorerPageProps) {
   const [query, setQuery] = useState<string>("");
-  const [queryText, setQueryText] = useState<string>(EXAMPLE_QUERIES[0].query);
+  const [queryText, setQueryText] = useState<string>(BUILTIN_EXAMPLE_QUERIES[0].query);
   const [queryRunning, setQueryRunning] = useState<boolean>(false);
   const [queryStatus, setQueryStatus] = useState<string>("");
+  const [savedExamples, setSavedExamples] = useState<SavedSparqlExample[]>([]);
+  const [savedExamplesStatus, setSavedExamplesStatus] = useState<string>("");
   const [graphElements, setGraphElements] = useState<ElementDefinition[]>([]);
+  const [graphHeight, setGraphHeight] = useState<number>(420);
   const [graphStats, setGraphStats] = useState<GraphStats>({
     triples: 0,
     nodes: 0,
@@ -447,6 +456,27 @@ export function MetadataExplorerPage({
   const graphContainerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
   const activeLayoutRef = useRef<cytoscape.Layouts | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSavedExamples() {
+      setSavedExamplesStatus("");
+      try {
+        const examples = await fetchSavedSparqlExamples();
+        if (cancelled) return;
+        setSavedExamples(examples);
+      } catch (error) {
+        if (cancelled) return;
+        const message =
+          error instanceof Error ? error.message : "Unknown error while loading saved examples.";
+        setSavedExamplesStatus(message);
+      }
+    }
+    void loadSavedExamples();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filteredEntities = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -614,7 +644,7 @@ export function MetadataExplorerPage({
     if (graphElements.length) {
       cy.fit(undefined, 24);
     }
-  }, [graphElements.length, leftColumnWidth]);
+  }, [graphElements.length, graphHeight, leftColumnWidth]);
 
   async function handleRunQuery() {
     setQueryRunning(true);
@@ -639,6 +669,31 @@ export function MetadataExplorerPage({
       setQueryStatus(`Query failed: ${message}`);
     } finally {
       setQueryRunning(false);
+    }
+  }
+
+  async function handleSaveExample() {
+    const trimmedQuery = queryText.trim();
+    if (!trimmedQuery) {
+      setQueryStatus("Cannot save an empty query.");
+      return;
+    }
+    const name = window.prompt("Save current query as example. Name:");
+    if (name === null) return;
+    const label = name.trim();
+    if (!label) {
+      setQueryStatus("Example name cannot be empty.");
+      return;
+    }
+    try {
+      await saveSparqlExample({ label, query: trimmedQuery });
+      const refreshed = await fetchSavedSparqlExamples();
+      setSavedExamples(refreshed);
+      setQueryStatus(`Saved example "${label}".`);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown error while saving example.";
+      setQueryStatus(message);
     }
   }
 
@@ -702,9 +757,10 @@ export function MetadataExplorerPage({
             id="example-query-select"
             defaultValue=""
             onChange={(event) => {
-              const chosen = EXAMPLE_QUERIES.find(
-                (q) => q.label === event.target.value
-              );
+              const selectedLabel = event.target.value;
+              const chosenSaved = savedExamples.find((q) => q.label === selectedLabel);
+              const chosenBuiltin = BUILTIN_EXAMPLE_QUERIES.find((q) => q.label === selectedLabel);
+              const chosen = chosenSaved ?? chosenBuiltin;
               if (chosen) setQueryText(chosen.query);
               event.target.value = "";
             }}
@@ -712,12 +768,24 @@ export function MetadataExplorerPage({
             <option value="" disabled>
               — select an example —
             </option>
-            {EXAMPLE_QUERIES.map((q) => (
-              <option key={q.label} value={q.label}>
-                {q.label}
-              </option>
-            ))}
+            {savedExamples.length ? (
+              <optgroup label="Saved">
+                {savedExamples.map((q) => (
+                  <option key={`saved:${q.label}`} value={q.label}>
+                    {q.label}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+            <optgroup label="Built-in">
+              {BUILTIN_EXAMPLE_QUERIES.map((q) => (
+                <option key={`builtin:${q.label}`} value={q.label}>
+                  {q.label}
+                </option>
+              ))}
+            </optgroup>
           </select>
+          {savedExamplesStatus ? <p className="muted">Saved examples: {savedExamplesStatus}</p> : null}
           <label htmlFor="graph-query">Query text</label>
           <textarea
             id="graph-query"
@@ -725,9 +793,14 @@ export function MetadataExplorerPage({
             onChange={(event) => setQueryText(event.target.value)}
             rows={9}
           />
-          <button type="button" onClick={handleRunQuery} disabled={queryRunning}>
-            {queryRunning ? "Running..." : "Run Query"}
-          </button>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button type="button" onClick={handleRunQuery} disabled={queryRunning}>
+              {queryRunning ? "Running..." : "Run Query"}
+            </button>
+            <button type="button" onClick={handleSaveExample} disabled={queryRunning}>
+              Save as example…
+            </button>
+          </div>
           {queryStatus ? <p>{queryStatus}</p> : null}
         </section>
 
@@ -764,7 +837,22 @@ export function MetadataExplorerPage({
               Dynamic force layout
             </label>
           ) : null}
-          <div className="graph-canvas-placeholder">
+          <label htmlFor="graph-height">
+            Graph height{" "}
+            <span className="muted" style={{ marginLeft: 6 }}>
+              {Math.round(graphHeight)}px
+            </span>
+          </label>
+          <input
+            id="graph-height"
+            type="range"
+            min={260}
+            max={900}
+            step={10}
+            value={graphHeight}
+            onChange={(event) => setGraphHeight(Number(event.target.value))}
+          />
+          <div className="graph-canvas-placeholder" style={{ height: graphHeight }}>
             <div ref={graphContainerRef} className="graph-canvas" />
             {!graphElements.length ? (
               <div className="graph-empty-state">
