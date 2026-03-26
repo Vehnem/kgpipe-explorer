@@ -28,6 +28,13 @@ type GraphStats = {
   edges: number;
 };
 
+type NodeTypeLegendItem = {
+  typeUri: string;
+  label: string;
+  color: string;
+  count: number;
+};
+
 type GraphLayoutName = "cose" | "breadthfirst" | "circle" | "grid" | "concentric";
 type DetailViewMode = "entity" | "queryTable";
 
@@ -58,6 +65,12 @@ type ExplorerEntity = {
   typeLabel: string;
 };
 
+type FetchedEntitySummary = {
+  id: string;
+  label: string;
+  typeUris: string[];
+};
+
 function isSparqlTerm(term: unknown): term is SparqlTerm {
   if (!term || typeof term !== "object") return false;
   const record = term as Record<string, unknown>;
@@ -74,6 +87,61 @@ function compactLabel(value: string): string {
 
 function isInternalKgpipeUri(value: string): boolean {
   return value.startsWith("http://github.com/ScaDS/kgpipe");
+}
+
+function hashStringToInt(value: string): number {
+  // Simple deterministic hash (32-bit) for stable colors across renders.
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  // h in [0..360), s/l in [0..100]
+  const ss = Math.max(0, Math.min(100, s)) / 100;
+  const ll = Math.max(0, Math.min(100, l)) / 100;
+
+  const c = (1 - Math.abs(2 * ll - 1)) * ss;
+  const hh = (((h % 360) + 360) % 360) / 60;
+  const x = c * (1 - Math.abs((hh % 2) - 1));
+
+  let r1 = 0;
+  let g1 = 0;
+  let b1 = 0;
+  if (hh >= 0 && hh < 1) {
+    r1 = c;
+    g1 = x;
+  } else if (hh >= 1 && hh < 2) {
+    r1 = x;
+    g1 = c;
+  } else if (hh >= 2 && hh < 3) {
+    g1 = c;
+    b1 = x;
+  } else if (hh >= 3 && hh < 4) {
+    g1 = x;
+    b1 = c;
+  } else if (hh >= 4 && hh < 5) {
+    r1 = x;
+    b1 = c;
+  } else {
+    r1 = c;
+    b1 = x;
+  }
+
+  const m = ll - c / 2;
+  const r = Math.round((r1 + m) * 255);
+  const g = Math.round((g1 + m) * 255);
+  const b = Math.round((b1 + m) * 255);
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function colorForTypeUri(typeUri: string): string {
+  const h = Math.abs(hashStringToInt(typeUri)) % 360;
+  // A moderately saturated, mid-lightness palette for readability.
+  return hslToHex(h, 65, 52);
 }
 
 function addUriToSubjectValuesClause(currentQuery: string, uri: string): string {
@@ -127,21 +195,23 @@ function buildGraphFromResult(result: Record<string, unknown>): {
   elements: ElementDefinition[];
   stats: GraphStats;
   triples: QueryTriple[];
+  typeLegend: NodeTypeLegendItem[];
 } {
   const maybeResults = (result as { results?: unknown }).results;
   if (!maybeResults || typeof maybeResults !== "object") {
-    return { elements: [], stats: { triples: 0, nodes: 0, edges: 0 }, triples: [] };
+    return { elements: [], stats: { triples: 0, nodes: 0, edges: 0 }, triples: [], typeLegend: [] };
   }
 
   const maybeBindings = (maybeResults as { bindings?: unknown }).bindings;
   if (!Array.isArray(maybeBindings)) {
-    return { elements: [], stats: { triples: 0, nodes: 0, edges: 0 }, triples: [] };
+    return { elements: [], stats: { triples: 0, nodes: 0, edges: 0 }, triples: [], typeLegend: [] };
   }
 
   const nodeMap = new Map<
     string,
     { id: string; label: string; value: string; termType: string }
   >();
+  const typeUrisByNodeId = new Map<string, Set<string>>();
   const edgeElements: ElementDefinition[] = [];
   const triples: QueryTriple[] = [];
   let edgeCount = 0;
@@ -176,6 +246,13 @@ function buildGraphFromResult(result: Record<string, unknown>): {
     });
     const sourceId = getNodeId(binding.s);
     const targetId = getNodeId(binding.o);
+
+    if (binding.p.value === RDF_TYPE_URI && binding.o.type === "uri") {
+      const set = typeUrisByNodeId.get(sourceId) ?? new Set<string>();
+      set.add(binding.o.value);
+      typeUrisByNodeId.set(sourceId, set);
+    }
+
     edgeElements.push({
       data: {
         id: `e${edgeCount++}`,
@@ -193,9 +270,32 @@ function buildGraphFromResult(result: Record<string, unknown>): {
       id: node.id,
       label: node.label,
       value: node.value,
-      termType: node.termType
+      termType: node.termType,
+      typeUris: [...(typeUrisByNodeId.get(node.id) ?? new Set<string>())].sort(),
+      primaryTypeUri: [...(typeUrisByNodeId.get(node.id) ?? new Set<string>())].sort()[0] ?? "",
+      nodeColor: (() => {
+        const primary = [...(typeUrisByNodeId.get(node.id) ?? new Set<string>())].sort()[0];
+        return primary ? colorForTypeUri(primary) : "#94a3b8";
+      })()
     }
   }));
+
+  const typeCounts = new Map<string, number>();
+  for (const node of nodeElements) {
+    const data = node.data as Record<string, unknown>;
+    const primaryTypeUri = typeof data.primaryTypeUri === "string" ? data.primaryTypeUri : "";
+    if (!primaryTypeUri) continue;
+    typeCounts.set(primaryTypeUri, (typeCounts.get(primaryTypeUri) ?? 0) + 1);
+  }
+
+  const typeLegend: NodeTypeLegendItem[] = [...typeCounts.entries()]
+    .map(([typeUri, count]) => ({
+      typeUri,
+      label: compactLabel(typeUri),
+      color: colorForTypeUri(typeUri),
+      count
+    }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 
   return {
     elements: [...nodeElements, ...edgeElements],
@@ -204,7 +304,8 @@ function buildGraphFromResult(result: Record<string, unknown>): {
       nodes: nodeElements.length,
       edges: edgeElements.length
     },
-    triples
+    triples,
+    typeLegend
   };
 }
 
@@ -314,6 +415,68 @@ const ENTITY_TYPE_LABEL_BY_ID: Record<EntityTypeId, string> = {
 
 const RDF_TYPE_URI = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const RDFS_LABEL_URI = "http://www.w3.org/2000/01/rdf-schema#label";
+
+function buildEntityOutgoingTriplesFromConstruct(
+  result: Record<string, unknown>,
+  entityId: string
+): QueryTriple[] {
+  const maybeResults = (result as { results?: unknown }).results;
+  if (!maybeResults || typeof maybeResults !== "object") return [];
+  const maybeBindings = (maybeResults as { bindings?: unknown }).bindings;
+  if (!Array.isArray(maybeBindings)) return [];
+
+  const triples: QueryTriple[] = [];
+  for (const row of maybeBindings) {
+    if (!row || typeof row !== "object") continue;
+    const binding = row as Record<string, unknown>;
+    if (!isSparqlTerm(binding.s) || !isSparqlTerm(binding.p) || !isSparqlTerm(binding.o)) continue;
+    if (binding.s.type !== "uri" || binding.s.value !== entityId) continue;
+    triples.push({
+      s: { value: binding.s.value, type: binding.s.type },
+      p: { value: binding.p.value, type: binding.p.type },
+      o: { value: binding.o.value, type: binding.o.type }
+    });
+  }
+
+  // Sort for stable display: predicate, then object
+  return triples.sort(
+    (a, b) =>
+      a.p.value.localeCompare(b.p.value) ||
+      a.o.value.localeCompare(b.o.value) ||
+      a.o.type.localeCompare(b.o.type)
+  );
+}
+
+function buildEntitySummaryFromConstruct(
+  result: Record<string, unknown>,
+  entityId: string
+): FetchedEntitySummary | null {
+  const maybeResults = (result as { results?: unknown }).results;
+  if (!maybeResults || typeof maybeResults !== "object") return null;
+  const maybeBindings = (maybeResults as { bindings?: unknown }).bindings;
+  if (!Array.isArray(maybeBindings)) return null;
+
+  const typeUris = new Set<string>();
+  const labels: string[] = [];
+
+  for (const row of maybeBindings) {
+    if (!row || typeof row !== "object") continue;
+    const binding = row as Record<string, unknown>;
+    if (!isSparqlTerm(binding.s) || !isSparqlTerm(binding.p) || !isSparqlTerm(binding.o)) continue;
+    if (binding.s.type !== "uri" || binding.s.value !== entityId) continue;
+
+    if (binding.p.value === RDF_TYPE_URI && binding.o.type === "uri") {
+      typeUris.add(binding.o.value);
+    }
+    if (binding.p.value === RDFS_LABEL_URI && binding.o.type === "literal") {
+      const label = binding.o.value.trim();
+      if (label) labels.push(label);
+    }
+  }
+
+  const label = labels[0] ?? compactLabel(entityId);
+  return { id: entityId, label, typeUris: [...typeUris].sort() };
+}
 
 const ENTITY_DISCOVERY_QUERY = `PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -444,12 +607,16 @@ export function MetadataExplorerPage({
     edges: 0
   });
   const [queryTriples, setQueryTriples] = useState<QueryTriple[]>([]);
+  const [nodeTypeLegend, setNodeTypeLegend] = useState<NodeTypeLegendItem[]>([]);
   const [graphLayout, setGraphLayout] = useState<GraphLayoutName>("cose");
   const [dynamicForceLayout, setDynamicForceLayout] = useState<boolean>(false);
   const [detailViewMode, setDetailViewMode] = useState<DetailViewMode>("entity");
   const [entityTypeFilter, setEntityTypeFilter] = useState<EntityTypeFilter>("all");
   const [entities, setEntities] = useState<ExplorerEntity[]>([]);
   const [entityStatus, setEntityStatus] = useState<string>("");
+  const [fetchedEntity, setFetchedEntity] = useState<FetchedEntitySummary | null>(null);
+  const [fetchedEntityStatus, setFetchedEntityStatus] = useState<string>("");
+  const [fetchedEntityTriples, setFetchedEntityTriples] = useState<QueryTriple[]>([]);
   const [leftColumnWidth, setLeftColumnWidth] = useState<number>(360);
   const [isResizingColumns, setIsResizingColumns] = useState<boolean>(false);
   const gridRef = useRef<HTMLDivElement | null>(null);
@@ -544,6 +711,41 @@ export function MetadataExplorerPage({
   }, [entities, selectedEntityId]);
 
   useEffect(() => {
+    let cancelled = false;
+    async function loadEntityDetails() {
+      setFetchedEntity(null);
+      setFetchedEntityStatus("");
+      setFetchedEntityTriples([]);
+
+      const id = selectedEntityId;
+      if (!id) return;
+      if (selectedTask) return;
+
+      setFetchedEntityStatus("Loading selected entity…");
+      try {
+        const query = `CONSTRUCT { <${id}> ?p ?o } WHERE { <${id}> ?p ?o } LIMIT 300`;
+        const result = await constructSparql(query);
+        const summary = buildEntitySummaryFromConstruct(result, id);
+        const outgoing = buildEntityOutgoingTriplesFromConstruct(result, id);
+        if (cancelled) return;
+        if (summary) setFetchedEntity(summary);
+        setFetchedEntityTriples(outgoing);
+        setFetchedEntityStatus("");
+      } catch (error) {
+        if (cancelled) return;
+        const message =
+          error instanceof Error ? error.message : "Unknown error while loading entity details.";
+        setFetchedEntityStatus(message);
+      }
+    }
+
+    void loadEntityDetails();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEntityId, selectedTask]);
+
+  useEffect(() => {
     if (!graphContainerRef.current) return;
     const cy = cytoscape({
       container: graphContainerRef.current,
@@ -556,7 +758,7 @@ export function MetadataExplorerPage({
             "font-size": "10px",
             "text-wrap": "wrap",
             "text-max-width": "120px",
-            "background-color": "#2563eb",
+            "background-color": "data(nodeColor)",
             color: "#0f172a"
           }
         },
@@ -585,6 +787,25 @@ export function MetadataExplorerPage({
       cyRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+
+    const onTapNode = (event: cytoscape.EventObject) => {
+      const node = event.target as cytoscape.NodeSingular;
+      const termType = node.data("termType") as unknown;
+      const value = node.data("value") as unknown;
+      if (termType !== "uri" || typeof value !== "string" || !value) return;
+      onSelectedEntityIdChange(value);
+      setDetailViewMode("entity");
+    };
+
+    cy.on("tap", "node", onTapNode);
+    return () => {
+      cy.off("tap", "node", onTapNode);
+    };
+  }, [onSelectedEntityIdChange]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -651,10 +872,11 @@ export function MetadataExplorerPage({
     setQueryStatus("");
     try {
       const result = await constructSparql(queryText);
-      const { elements, stats, triples } = buildGraphFromResult(result);
+      const { elements, stats, triples, typeLegend } = buildGraphFromResult(result);
       setGraphElements(elements);
       setGraphStats(stats);
       setQueryTriples(triples);
+      setNodeTypeLegend(typeLegend);
       setQueryStatus(
         stats.triples
           ? `Query completed. Parsed ${stats.triples} triples into ${stats.nodes} nodes and ${stats.edges} edges.`
@@ -664,6 +886,7 @@ export function MetadataExplorerPage({
       setGraphElements([]);
       setGraphStats({ triples: 0, nodes: 0, edges: 0 });
       setQueryTriples([]);
+      setNodeTypeLegend([]);
       const message =
         error instanceof Error ? error.message : "Unknown error while running query.";
       setQueryStatus(`Query failed: ${message}`);
@@ -852,8 +1075,52 @@ export function MetadataExplorerPage({
             value={graphHeight}
             onChange={(event) => setGraphHeight(Number(event.target.value))}
           />
-          <div className="graph-canvas-placeholder" style={{ height: graphHeight }}>
+          <div className="graph-canvas-placeholder" style={{ height: graphHeight, position: "relative" }}>
             <div ref={graphContainerRef} className="graph-canvas" />
+            {nodeTypeLegend.length ? (
+              <aside
+                aria-label="Node type legend"
+                style={{
+                  position: "absolute",
+                  top: 10,
+                  right: 10,
+                  width: 240,
+                  maxHeight: Math.max(120, graphHeight - 20),
+                  overflow: "auto",
+                  background: "rgba(255,255,255,0.92)",
+                  border: "1px solid rgba(148,163,184,0.65)",
+                  borderRadius: 10,
+                  padding: "10px 10px 8px 10px",
+                  boxShadow: "0 8px 18px rgba(15,23,42,0.10)"
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 650, marginBottom: 8 }}>rdf:type</div>
+                <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
+                  {nodeTypeLegend.map((item) => (
+                    <li
+                      key={item.typeUri}
+                      title={item.typeUri}
+                      style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
+                    >
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: 4,
+                          background: item.color,
+                          border: "1px solid rgba(15,23,42,0.22)",
+                          flex: "0 0 auto"
+                        }}
+                      />
+                      <span style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {item.label} <span className="muted">({item.count})</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </aside>
+            ) : null}
             {!graphElements.length ? (
               <div className="graph-empty-state">
                 <p>Run a SPARQL query to render graph results.</p>
@@ -984,7 +1251,94 @@ export function MetadataExplorerPage({
                 <p>
                   <strong>URI:</strong> {selectedEntity.id}
                 </p>
+                {fetchedEntityStatus ? <p className="muted">{fetchedEntityStatus}</p> : null}
+                {fetchedEntityTriples.length ? (
+                  <div style={{ overflowX: "auto" }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Predicate</th>
+                          <th>Object</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {fetchedEntityTriples.map((triple, index) => (
+                          <tr key={`${triple.p.value}|${triple.o.value}|${triple.o.type}|${index}`}>
+                            <td>
+                              <QueryTermCell
+                                term={triple.p}
+                                onSelectEntity={(entityId) => {
+                                  onSelectedEntityIdChange(entityId);
+                                  setDetailViewMode("entity");
+                                }}
+                              />
+                            </td>
+                            <td>
+                              <QueryTermCell
+                                term={triple.o}
+                                onSelectEntity={(entityId) => {
+                                  onSelectedEntityIdChange(entityId);
+                                  setDetailViewMode("entity");
+                                }}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
               </>
+            ) : fetchedEntity ? (
+              <>
+                <h3>{fetchedEntity.label}</h3>
+                <p>
+                  <strong>Type:</strong>{" "}
+                  {fetchedEntity.typeUris.length ? fetchedEntity.typeUris.map(compactLabel).join(", ") : "—"}
+                </p>
+                <p>
+                  <strong>URI:</strong> {fetchedEntity.id}
+                </p>
+                {fetchedEntityStatus ? <p className="muted">{fetchedEntityStatus}</p> : null}
+                {fetchedEntityTriples.length ? (
+                  <div style={{ overflowX: "auto" }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Predicate</th>
+                          <th>Object</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {fetchedEntityTriples.map((triple, index) => (
+                          <tr key={`${triple.p.value}|${triple.o.value}|${triple.o.type}|${index}`}>
+                            <td>
+                              <QueryTermCell
+                                term={triple.p}
+                                onSelectEntity={(entityId) => {
+                                  onSelectedEntityIdChange(entityId);
+                                  setDetailViewMode("entity");
+                                }}
+                              />
+                            </td>
+                            <td>
+                              <QueryTermCell
+                                term={triple.o}
+                                onSelectEntity={(entityId) => {
+                                  onSelectedEntityIdChange(entityId);
+                                  setDetailViewMode("entity");
+                                }}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+              </>
+            ) : fetchedEntityStatus ? (
+              <p className="muted">{fetchedEntityStatus}</p>
             ) : (
               <p>Select an entity to inspect details.</p>
             )
