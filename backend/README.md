@@ -52,7 +52,7 @@ uv pip install -e /path/to/kgpipe
 
 ## Run the backend
 
-From `backend/` with dependencies installed into `backend/.venv`:
+From this `backend/` directory with `uv`:
 
 ```bash
 uv run python -m uvicorn app:app --reload --port 18000

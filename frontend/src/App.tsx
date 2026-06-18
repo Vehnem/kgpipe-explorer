@@ -4,9 +4,10 @@ import { PipelineBuilderPage } from "./pages/PipelineBuilderPage";
 import { PipelineLeaderboardPage } from "./pages/PipelineLeaderboardPage";
 import { MetadataExplorerPage } from "./pages/MetadataExplorerPage";
 import { ResultsPage } from "./pages/ResultsPage";
+import { LearnPage } from "./pages/LearnPage";
 import { TutorialButton } from "./tutorial/TutorialButton";
 
-type PageId = "builder" | "leaderboard" | "explorer" | "results";
+type PageId = "builder" | "leaderboard" | "explorer" | "results" | "learn";
 
 export function App() {
   const [tasks, setTasks] = useState<TaskSpec[]>([]);
@@ -88,10 +89,17 @@ export function App() {
           >
             Pipeline Leaderboard
           </button>
+          <button
+            type="button"
+            className={activePage === "learn" ? "active" : ""}
+            onClick={() => navigateToPage("learn")}
+          >
+            Learn
+          </button>
         </nav>
       </header>
 
-      {loadingError ? (
+      {loadingError && activePage !== "learn" ? (
         <main className="page-scaffold">
           <p className="error-banner">Unable to load tasks: {loadingError}</p>
         </main>
@@ -107,9 +115,10 @@ export function App() {
           {activePage === "builder" && <PipelineBuilderPage tasks={tasks} />}
           {activePage === "results" && <ResultsPage tasks={tasks} />}
           {activePage === "leaderboard" && <PipelineLeaderboardPage tasks={tasks} />}
+          {activePage === "learn" && <LearnPage onNavigate={navigateToPage} />}
         </main>
       )}
-      <TutorialButton page={activePage} />
+      <TutorialButton page={activePage} onOpenLearn={() => navigateToPage("learn")} />
     </div>
   );
 }
@@ -150,6 +159,7 @@ function isPageId(value: string | null): value is PageId {
     value === "builder" ||
     value === "leaderboard" ||
     value === "explorer" ||
-    value === "results"
+    value === "results" ||
+    value === "learn"
   );
 }

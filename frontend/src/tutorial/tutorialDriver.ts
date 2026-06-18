@@ -1,14 +1,14 @@
 import { driver, type DriveStep } from "driver.js";
 import "driver.js/dist/driver.css";
 import { tutorialStepsByPage } from "./tutorialSteps";
-import type { TutorialPage, TutorialStep } from "./tutorialTypes";
+import type { TutorialLanguage, TutorialPage, TutorialStep } from "./tutorialTypes";
 
-function toDriveStep(step: TutorialStep): DriveStep {
+function toDriveStep(step: TutorialStep, language: TutorialLanguage): DriveStep {
   return {
     element: step.element,
     popover: {
-      title: step.title,
-      description: step.description,
+      title: step.title[language],
+      description: step.description[language],
       side: step.side ?? "bottom",
       align: step.align ?? "center"
     }
@@ -20,9 +20,13 @@ function isVisibleStep(step: TutorialStep): boolean {
   return Boolean(document.querySelector(step.element));
 }
 
-export function startTutorialForPage(page: TutorialPage): void {
-  const steps = tutorialStepsByPage[page].filter(isVisibleStep).map(toDriveStep);
+export function startTutorialForPage(page: TutorialPage, language: TutorialLanguage): void {
+  const steps = tutorialStepsByPage[page]
+    .filter(isVisibleStep)
+    .map((step) => toDriveStep(step, language));
   if (steps.length === 0) return;
+
+  const isEnglish = language === "en";
 
   const tutorial = driver({
     steps,
@@ -35,10 +39,10 @@ export function startTutorialForPage(page: TutorialPage): void {
     popoverClass: "kgpipe-tutorial-popover",
     showButtons: ["previous", "next", "close"],
     showProgress: true,
-    nextBtnText: "Weiter",
-    prevBtnText: "Zurueck",
-    doneBtnText: "Fertig",
-    progressText: "{{current}} von {{total}}",
+    nextBtnText: isEnglish ? "Next" : "Weiter",
+    prevBtnText: isEnglish ? "Back" : "Zurueck",
+    doneBtnText: isEnglish ? "Done" : "Fertig",
+    progressText: isEnglish ? "{{current}} of {{total}}" : "{{current}} von {{total}}",
     stagePadding: 8,
     stageRadius: 10
   });

@@ -22,16 +22,17 @@ Backend setup instructions (including `uv` venv + dependencies) are in:
 
 - `backend/README.md`
 
-Quick run with the backend venv from repo root:
+Quick run from `backend/` with `uv`:
+
+```bash
+cd backend
+uv run python -m uvicorn app:app --reload --port 18000
+```
+
+Equivalent run from repo root using the backend venv directly:
 
 ```bash
 backend/.venv/bin/python -m uvicorn app:app --app-dir backend --reload --port 18000
-```
-
-Or from `backend/`:
-
-```bash
-uv run python -m uvicorn app:app --reload --port 18000
 ```
 
 ### Frontend

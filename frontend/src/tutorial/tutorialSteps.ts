@@ -4,114 +4,215 @@ export const tutorialStepsByPage: Record<TutorialPage, TutorialStep[]> = {
   builder: [
     {
       element: '[data-tutorial="app-tabs"]',
-      title: "Bereiche wechseln",
-      description:
-        "Die Tabs fuehren zu Pipeline-Editor, Metadata Explorer, Ergebnissen und Leaderboard.",
+      title: {
+        en: "Main areas",
+        de: "Hauptbereiche"
+      },
+      description: {
+        en: "Use the tabs to move between learning, metadata exploration, pipeline design, results, and rankings.",
+        de: "Nutze die Tabs, um zwischen Lernen, Metadaten-Exploration, Pipeline-Design, Ergebnissen und Rankings zu wechseln."
+      },
       side: "bottom"
     },
     {
       element: '[data-tutorial="builder-sidebar"]',
-      title: "Pipeline vorbereiten",
-      description:
-        "Links findest du Beispielpipelines, Daten-Elemente und Tasks, die du auf die Arbeitsflaeche bringen kannst.",
+      title: {
+        en: "Build from data and tasks",
+        de: "Aus Daten und Tasks bauen"
+      },
+      description: {
+        en: "A pipeline is a directed chain of processing steps. Sources provide data, tasks transform it, and sinks collect results such as a final knowledge graph.",
+        de: "Eine Pipeline ist eine gerichtete Kette von Verarbeitungsschritten. Quellen liefern Daten, Tasks transformieren sie, und Senken sammeln Ergebnisse wie einen finalen Knowledge Graph."
+      },
       side: "right"
     },
     {
       element: '[data-tutorial="builder-task-search"]',
-      title: "Tasks finden",
-      description:
-        "Die Suche filtert nach Task-Namen sowie deklarierten Ein- und Ausgabeformaten.",
+      title: {
+        en: "Find compatible tasks",
+        de: "Kompatible Tasks finden"
+      },
+      description: {
+        en: "Tasks declare input and output formats. In KG workflows this matters because text, JSON, RDF, and Turtle cannot always be connected directly.",
+        de: "Tasks deklarieren Eingabe- und Ausgabeformate. In KG-Workflows ist das wichtig, weil Text, JSON, RDF und Turtle nicht immer direkt verbunden werden koennen."
+      },
       side: "right"
     },
     {
       element: '[data-tutorial="builder-canvas"]',
-      title: "Pipeline zeichnen",
-      description:
-        "Auf dem Canvas verbindest du Ausgaben mit Eingaben. Format-Mismatches werden direkt abgefangen.",
+      title: {
+        en: "Draw the data flow",
+        de: "Datenfluss zeichnen"
+      },
+      description: {
+        en: "The canvas is a DAG sketch: data flows from sources through tasks to outputs. Connections should match formats so every step can consume what the previous step produced.",
+        de: "Der Canvas ist eine DAG-Skizze: Daten fliessen von Quellen durch Tasks zu Outputs. Verbindungen sollten Formate matchen, damit jeder Schritt die Ausgabe des vorherigen Schritts nutzen kann."
+      },
       side: "left"
     }
   ],
   explorer: [
     {
       element: '[data-tutorial="app-tabs"]',
-      title: "Bereiche wechseln",
-      description:
-        "Die Tabs bleiben global sichtbar, damit du zwischen Exploration, Editor und Auswertung springen kannst.",
+      title: {
+        en: "Where you are",
+        de: "Wo du bist"
+      },
+      description: {
+        en: "The Metadata Explorer is the graph view of KGpipe knowledge: tasks, implementations, metrics, runs, and their relationships.",
+        de: "Der Metadata Explorer ist die Graph-Ansicht des KGpipe-Wissens: Tasks, Implementierungen, Metriken, Runs und ihre Beziehungen."
+      },
       side: "bottom"
     },
     {
       element: '[data-tutorial="explorer-query"]',
-      title: "SPARQL-Abfragen",
-      description:
-        "Hier laedst du Beispielqueries, passt sie an und fuehrst sie gegen die KGpipe-Metadaten aus.",
+      title: {
+        en: "Ask graph-shaped questions",
+        de: "Graph-Fragen stellen"
+      },
+      description: {
+        en: "SPARQL is the query language for RDF knowledge graphs. Instead of rows and columns, it searches for graph patterns such as task -> produces -> format.",
+        de: "SPARQL ist die Abfragesprache fuer RDF Knowledge Graphs. Statt Zeilen und Spalten sucht sie Graph-Muster wie Task -> produziert -> Format."
+      },
       side: "right"
     },
     {
       element: '[data-tutorial="explorer-graph"]',
-      title: "Graph verstehen",
-      description:
-        "Die Query-Ergebnisse werden als interaktiver Graph mit Layout- und Hoehensteuerung visualisiert.",
+      title: {
+        en: "Read triples visually",
+        de: "Triples visuell lesen"
+      },
+      description: {
+        en: "Each edge represents a statement: subject, predicate, object. For example, a task can use a tool or produce a data format.",
+        de: "Jede Kante repraesentiert eine Aussage: Subjekt, Praedikat, Objekt. Zum Beispiel kann ein Task ein Tool nutzen oder ein Datenformat erzeugen."
+      },
       side: "left"
     },
     {
       element: '[data-tutorial="explorer-entities"]',
-      title: "Entitaeten durchsuchen",
-      description:
-        "Die Seitenleiste hilft beim Filtern von Tasks, Implementierungen, Metriken und Runs.",
+      title: {
+        en: "Filter entities",
+        de: "Entitaeten filtern"
+      },
+      description: {
+        en: "Entities are the things in a knowledge graph. Here they can be tasks, implementations, metrics, metric runs, or other KGpipe concepts.",
+        de: "Entitaeten sind die Dinge in einem Knowledge Graph. Hier koennen das Tasks, Implementierungen, Metriken, Metrik-Runs oder andere KGpipe-Konzepte sein."
+      },
       side: "right"
     },
     {
       element: '[data-tutorial="explorer-detail"]',
-      title: "Details pruefen",
-      description:
-        "Unten rechts siehst du Details zur ausgewaehlten Entitaet oder die Query-Ergebnisse als Tabelle.",
+      title: {
+        en: "Inspect meaning",
+        de: "Bedeutung pruefen"
+      },
+      description: {
+        en: "Details help translate graph structure into meaning: what an entity is, what it consumes, what it produces, and how it relates to the pipeline ecosystem.",
+        de: "Details uebersetzen Graph-Struktur in Bedeutung: was eine Entitaet ist, was sie konsumiert, was sie produziert und wie sie mit dem Pipeline-Oekosystem zusammenhaengt."
+      },
       side: "top"
     }
   ],
   results: [
     {
       element: '[data-tutorial="results-pipelines"]',
-      title: "Pipelines auswaehlen",
-      description:
-        "Waehle eine oder zwei Pipelines, um Metriken und Artefakte nebeneinander zu vergleichen.",
+      title: {
+        en: "Choose runs to compare",
+        de: "Runs zum Vergleich waehlen"
+      },
+      description: {
+        en: "Pipeline results connect graph-building decisions to measurable outcomes. Select one or two pipelines to compare their behavior.",
+        de: "Pipeline Results verbinden Graph-Building-Entscheidungen mit messbaren Ergebnissen. Waehle eine oder zwei Pipelines zum Vergleich."
+      },
       side: "bottom"
     },
     {
       element: '[data-tutorial="results-metrics"]',
-      title: "Metriken vergleichen",
-      description:
-        "Die Tabellen zeigen Summary- oder Stage-Werte und markieren Unterschiede zwischen zwei Pipelines.",
+      title: {
+        en: "Read metrics as evidence",
+        de: "Metriken als Evidenz lesen"
+      },
+      description: {
+        en: "Metrics summarize quality signals such as coverage, consistency, or accuracy. They are not the graph itself, but evidence about how well a pipeline performed.",
+        de: "Metriken fassen Qualitaetssignale wie Coverage, Konsistenz oder Genauigkeit zusammen. Sie sind nicht der Graph selbst, sondern Evidenz zur Pipeline-Leistung."
+      },
       side: "top"
     },
     {
       element: '[data-tutorial="results-artifacts"]',
-      title: "Artefakte ansehen",
-      description:
-        "Hier findest du erzeugte Dateien und Run-Artefakte pro Pipeline und Stage.",
+      title: {
+        en: "Inspect artifacts",
+        de: "Artefakte pruefen"
+      },
+      description: {
+        en: "Artifacts are files produced by pipeline stages: candidate tables, logs, triple dumps, evaluation reports, or final KG serializations.",
+        de: "Artefakte sind Dateien aus Pipeline-Stages: Kandidatentabellen, Logs, Triple-Dumps, Evaluationsberichte oder finale KG-Serialisierungen."
+      },
       side: "top"
     }
   ],
   leaderboard: [
     {
       element: '[data-tutorial="leaderboard-summary"]',
-      title: "Ranking-Ueberblick",
-      description:
-        "Die Kennzahlen zeigen, wie viele Pipelines, Runs und Metriken gerade in das Ranking eingehen.",
+      title: {
+        en: "Ranking is a model",
+        de: "Ranking ist ein Modell"
+      },
+      description: {
+        en: "A leaderboard turns many measurements into one ordering. That ordering depends on selected metrics, groups, aggregators, and weights.",
+        de: "Ein Leaderboard macht aus vielen Messwerten eine Rangfolge. Diese Rangfolge haengt von Metriken, Gruppen, Aggregatoren und Gewichten ab."
+      },
       side: "bottom"
     },
     {
       element: '[data-tutorial="leaderboard-config"]',
-      title: "Schema konfigurieren",
-      description:
-        "Links legst du Pipeline-Auswahl, Metrikgruppen, Gewichtungen und Aggregationen fest.",
+      title: {
+        en: "Define priorities",
+        de: "Prioritaeten definieren"
+      },
+      description: {
+        en: "Metric groups express what you care about, for example coverage, accuracy, or consistency. Weights decide which concerns matter more.",
+        de: "Metrikgruppen zeigen, was wichtig ist, zum Beispiel Coverage, Accuracy oder Konsistenz. Gewichte entscheiden, welche Ziele staerker zaehlen."
+      },
       side: "right"
     },
     {
       element: '[data-tutorial="leaderboard-preview"]',
-      title: "Ranking pruefen",
-      description:
-        "Rechts siehst du sofort, wie sich deine Einstellungen auf Rangfolge und Verteilungen auswirken.",
+      title: {
+        en: "Check robustness",
+        de: "Robustheit pruefen"
+      },
+      description: {
+        en: "The preview shows whether a pipeline wins consistently or only under a specific weighting. This helps avoid over-interpreting a single score.",
+        de: "Die Vorschau zeigt, ob eine Pipeline stabil gewinnt oder nur bei bestimmten Gewichtungen. Das hilft, einzelne Scores nicht zu ueberinterpretieren."
+      },
       side: "left"
+    }
+  ],
+  learn: [
+    {
+      element: '[data-tutorial="learn-basics"]',
+      title: {
+        en: "Start with graph basics",
+        de: "Mit Graph-Grundlagen starten"
+      },
+      description: {
+        en: "The Learn page explains knowledge graphs, triples, RDF, SPARQL, pipelines, metrics, and how those ideas connect in KGpipe Explorer.",
+        de: "Die Learn-Seite erklaert Knowledge Graphs, Triples, RDF, SPARQL, Pipelines, Metriken und wie diese Ideen im KGpipe Explorer zusammenhaengen."
+      },
+      side: "bottom"
+    },
+    {
+      element: '[data-tutorial="learn-workflow"]',
+      title: {
+        en: "Then try the workflow",
+        de: "Danach den Workflow ausprobieren"
+      },
+      description: {
+        en: "Use the workflow cards to jump from concept to practice: inspect metadata, sketch a pipeline, compare outputs, and reason about rankings.",
+        de: "Nutze die Workflow-Karten, um vom Konzept zur Praxis zu springen: Metadaten ansehen, Pipeline skizzieren, Outputs vergleichen und Rankings bewerten."
+      },
+      side: "top"
     }
   ]
 };
