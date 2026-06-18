@@ -4,7 +4,7 @@ This backend uses FastAPI and `PipeKG` integration points.
 
 ## Prerequisites
 
-- Python 3.10+ (3.11 recommended for local dev)
+- Python 3.12+ (3.12 recommended for local dev)
 - [`uv`](https://docs.astral.sh/uv/)
 
 ## Create and activate a virtual environment
@@ -52,16 +52,24 @@ uv pip install -e /path/to/kgpipe
 
 ## Run the backend
 
-From `backend/` with the venv activated:
+From `backend/` with dependencies installed into `backend/.venv`:
 
 ```bash
-uv run uvicorn app:app --reload --port 8000
+uv run python -m uvicorn app:app --reload --port 18000
 ```
+
+From the repo root, use the backend venv explicitly:
+
+```bash
+backend/.venv/bin/python -m uvicorn app:app --app-dir backend --reload --port 18000
+```
+
+Avoid `uv run uvicorn ...` from the repo root: this checkout has no root Python project, so `uv` will not use `backend/requirements.txt` or `backend/.venv` there.
 
 Health check:
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:18000/health
 ```
 
 ## Run with Docker

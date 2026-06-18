@@ -246,7 +246,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
 
   return (
     <div className="builder-layout">
-      <aside className="builder-panel">
+      <aside className="builder-panel" data-tutorial="builder-sidebar">
         <h2>KGpipe Pipeline Editor</h2>
         <p>React Flow prototype for DAG pipeline editing.</p>
 
@@ -297,6 +297,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         <label htmlFor="task-search">Search tasks</label>
         <input
           id="task-search"
+          data-tutorial="builder-task-search"
           type="text"
           value={search}
           placeholder="Search by name, input, output..."
@@ -404,7 +405,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         <p>Roots: {countRoots(nodes, edges)}</p>
         <p>Leaves: {countLeaves(nodes, edges)}</p>
       </aside>
-      <main className="builder-canvas">
+      <main className="builder-canvas" data-tutorial="builder-canvas">
         <ReactFlow
           nodes={nodes}
           edges={edges}

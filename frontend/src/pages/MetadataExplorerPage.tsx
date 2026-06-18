@@ -973,7 +973,7 @@ export function MetadataExplorerPage({
         className={`metadata-explorer-grid${isResizingColumns ? " is-resizing" : ""}`}
         style={{ gridTemplateColumns: `${leftColumnWidth}px 8px minmax(0, 1fr)` }}
       >
-        <section className="query-panel" style={{ gridColumn: 1, gridRow: 1 }}>
+        <section className="query-panel" data-tutorial="explorer-query" style={{ gridColumn: 1, gridRow: 1 }}>
           <h3>SPARQL Query</h3>
           <label htmlFor="example-query-select">Example queries</label>
           <select
@@ -1036,7 +1036,7 @@ export function MetadataExplorerPage({
           style={{ gridColumn: 2, gridRow: "1 / span 2" }}
         />
 
-        <section className="graph-panel" style={{ gridColumn: 3, gridRow: 1 }}>
+        <section className="graph-panel" data-tutorial="explorer-graph" style={{ gridColumn: 3, gridRow: 1 }}>
           <h3>Graph</h3>
           <label htmlFor="graph-layout-select">Layout</label>
           <select
@@ -1133,7 +1133,7 @@ export function MetadataExplorerPage({
           </p>
         </section>
 
-        <aside className="explorer-sidebar" style={{ gridColumn: 1, gridRow: 2 }}>
+        <aside className="explorer-sidebar" data-tutorial="explorer-entities" style={{ gridColumn: 1, gridRow: 2 }}>
           <label htmlFor="kg-search">Search entities</label>
           <input
             id="kg-search"
@@ -1188,7 +1188,7 @@ export function MetadataExplorerPage({
           ))}
         </aside>
 
-        <article className="explorer-detail" style={{ gridColumn: 3, gridRow: 2 }}>
+        <article className="explorer-detail" data-tutorial="explorer-detail" style={{ gridColumn: 3, gridRow: 2 }}>
           <nav className="page-tabs" aria-label="Detail view switch">
             <button
               type="button"

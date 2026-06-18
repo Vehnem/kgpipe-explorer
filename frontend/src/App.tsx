@@ -4,6 +4,7 @@ import { PipelineBuilderPage } from "./pages/PipelineBuilderPage";
 import { PipelineLeaderboardPage } from "./pages/PipelineLeaderboardPage";
 import { MetadataExplorerPage } from "./pages/MetadataExplorerPage";
 import { ResultsPage } from "./pages/ResultsPage";
+import { TutorialButton } from "./tutorial/TutorialButton";
 
 type PageId = "builder" | "leaderboard" | "explorer" | "results";
 
@@ -53,12 +54,12 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <header className="app-header">
+      <header className="app-header" data-tutorial="app-header">
         <div>
           <h1>KGpipe Explorer</h1>
           <p className="header-subtitle">Prototype workspace for pipeline design and inspection</p>
         </div>
-        <nav className="page-tabs" aria-label="Explorer pages">
+        <nav className="page-tabs" aria-label="Explorer pages" data-tutorial="app-tabs">
           <button
             type="button"
             className={activePage === "explorer" ? "active" : ""}
@@ -108,6 +109,7 @@ export function App() {
           {activePage === "leaderboard" && <PipelineLeaderboardPage tasks={tasks} />}
         </main>
       )}
+      <TutorialButton page={activePage} />
     </div>
   );
 }

@@ -1246,3 +1246,74 @@ body,
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.tutorial-help-button {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 40;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #1d4ed8;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  box-shadow: 0 12px 28px rgb(37 99 235 / 28%);
+  cursor: pointer;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.tutorial-help-button:hover {
+  background: #1d4ed8;
+  box-shadow: 0 16px 34px rgb(37 99 235 / 34%);
+  transform: translateY(-1px);
+}
+
+.tutorial-help-button:focus-visible {
+  outline: 3px solid rgb(37 99 235 / 28%);
+  outline-offset: 3px;
+}
+
+.kgpipe-tutorial-popover {
+  max-width: 340px;
+  color: #0f172a;
+  border-radius: 12px;
+}
+
+.kgpipe-tutorial-popover .driver-popover-title {
+  font-size: 15px;
+  color: #0f172a;
+}
+
+.kgpipe-tutorial-popover .driver-popover-description {
+  color: #475569;
+  line-height: 1.45;
+}
+
+.kgpipe-tutorial-popover .driver-popover-next-btn,
+.kgpipe-tutorial-popover .driver-popover-done-btn {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+  text-shadow: none;
+}
+
+.kgpipe-tutorial-popover .driver-popover-prev-btn {
+  color: #334155;
+  text-shadow: none;
+}
+
+@media (max-width: 720px) {
+  .tutorial-help-button {
+    right: 14px;
+    bottom: 14px;
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+}
