@@ -1246,3 +1246,265 @@ body,
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.tutorial-help {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 40;
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
+.tutorial-help--builder {
+  bottom: 20px;
+  right: 220px;
+}
+
+.tutorial-help-button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid #1d4ed8;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  box-shadow: 0 12px 28px rgb(37 99 235 / 28%);
+  cursor: pointer;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.tutorial-help-menu {
+  width: min(300px, calc(100vw - 32px));
+  border: 1px solid #cbd5e1;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 20px 48px rgb(15 23 42 / 18%);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.tutorial-help-menu h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.tutorial-help-menu p {
+  margin: 4px 0 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.tutorial-help-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.tutorial-help-actions button {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #0f172a;
+  cursor: pointer;
+  font-weight: 650;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.tutorial-help-actions button:hover {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.tutorial-language-toggle {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  padding: 9px 10px 10px;
+}
+
+.tutorial-language-toggle legend {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 4px;
+  text-transform: uppercase;
+}
+
+.tutorial-language-toggle label {
+  align-items: center;
+  color: #334155;
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 5px;
+}
+
+.tutorial-help-button:hover {
+  background: #1d4ed8;
+  box-shadow: 0 16px 34px rgb(37 99 235 / 34%);
+  transform: translateY(-1px);
+}
+
+.tutorial-help-button:focus-visible {
+  outline: 3px solid rgb(37 99 235 / 28%);
+  outline-offset: 3px;
+}
+
+.kgpipe-tutorial-popover {
+  max-width: 340px;
+  color: #0f172a;
+  border-radius: 12px;
+}
+
+.kgpipe-tutorial-popover .driver-popover-title {
+  font-size: 15px;
+  color: #0f172a;
+}
+
+.kgpipe-tutorial-popover .driver-popover-description {
+  color: #475569;
+  line-height: 1.45;
+}
+
+.kgpipe-tutorial-popover .driver-popover-next-btn,
+.kgpipe-tutorial-popover .driver-popover-done-btn {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+  text-shadow: none;
+}
+
+.kgpipe-tutorial-popover .driver-popover-prev-btn {
+  color: #334155;
+  text-shadow: none;
+}
+
+@media (max-width: 720px) {
+  .tutorial-help,
+  .tutorial-help--builder {
+    right: 14px;
+    bottom: 14px;
+  }
+
+  .tutorial-help-button {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+}
+
+.learn-page {
+  display: grid;
+  gap: 18px;
+}
+
+.learn-basics-block {
+  display: grid;
+  gap: 18px;
+}
+
+.learn-hero {
+  border: 1px solid #dbeafe;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #eff6ff, #fff 62%, #f8fafc);
+  padding: 22px;
+}
+
+.learn-hero h2 {
+  font-size: 28px;
+  max-width: 820px;
+}
+
+.learn-eyebrow {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+.learn-concept-grid,
+.learn-workflow-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.learn-card,
+.learn-workflow-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 6%);
+  padding: 16px;
+}
+
+.learn-card h3,
+.learn-workflow-card h4 {
+  margin: 0 0 8px;
+}
+
+.learn-card p,
+.learn-workflow-card p {
+  color: #475569;
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+.learn-card code {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  color: #0f172a;
+  display: inline-block;
+  font-size: 12px;
+  padding: 5px 9px;
+}
+
+.learn-workflow {
+  display: grid;
+  gap: 12px;
+}
+
+.learn-section-heading h3 {
+  margin: 0;
+}
+
+.learn-step-index {
+  align-items: center;
+  background: #2563eb;
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  height: 26px;
+  justify-content: center;
+  margin-bottom: 10px;
+  width: 26px;
+}
+
+.learn-workflow-card button {
+  border: 1px solid #2563eb;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 8px 12px;
+}
+
+.learn-workflow-card button:hover {
+  background: #1d4ed8;
+}

@@ -361,7 +361,7 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
         </p>
       </header>
 
-      <div className="leaderboard-summary">
+      <div className="leaderboard-summary" data-tutorial="leaderboard-summary">
         <div className="stat-card">
           <div className="stat-value">
             {selectedPipelines.length}/{pipelineCount}
@@ -387,7 +387,7 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
       </div>
 
       <section className="leaderboard-editor">
-        <div className="leaderboard-editor-left">
+        <div className="leaderboard-editor-left" data-tutorial="leaderboard-config">
           <h3>Ranking Schema Editor</h3>
 
           <div className="editor-global-controls">
@@ -694,7 +694,7 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
           </div>
         </div>
 
-        <aside className="leaderboard-editor-right">
+        <aside className="leaderboard-editor-right" data-tutorial="leaderboard-preview">
           <div className="preview-header">
             <h3>Rank Preview</h3>
             <div className="preview-mode-toggle" role="tablist" aria-label="Rank preview mode">

@@ -352,7 +352,7 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
       {/* Pipeline picker                                                      */}
       {/* ------------------------------------------------------------------ */}
       {!loading && !loadingError && (
-        <div className="results-section">
+        <div className="results-section" data-tutorial="results-pipelines">
           <div className="results-section-header">
             <h3>Pipelines</h3>
             <span className="muted">
@@ -397,7 +397,7 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
       {/* Metrics                                                              */}
       {/* ------------------------------------------------------------------ */}
       {selectedPipelines.length > 0 && (
-        <div className="results-section">
+        <div className="results-section" data-tutorial="results-metrics">
           <div className="results-section-header">
             <h3>Metrics</h3>
             <div className="preview-mode-toggle">
@@ -465,7 +465,7 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
       {/* Data Artifacts                                                       */}
       {/* ------------------------------------------------------------------ */}
       {selectedPipelines.length > 0 && (
-        <div className="results-section">
+        <div className="results-section" data-tutorial="results-artifacts">
           <div className="results-section-header">
             <h3>Data Artifacts</h3>
             <span className="muted" style={{ fontSize: 12 }}>

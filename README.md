@@ -22,10 +22,17 @@ Backend setup instructions (including `uv` venv + dependencies) are in:
 
 - `backend/README.md`
 
-Quick run from repo root:
+Quick run from `backend/` with `uv`:
 
 ```bash
-uv run uvicorn app:app --app-dir backend --reload --port 8000
+cd backend
+uv run python -m uvicorn app:app --reload --port 18000
+```
+
+Equivalent run from repo root using the backend venv directly:
+
+```bash
+backend/.venv/bin/python -m uvicorn app:app --app-dir backend --reload --port 18000
 ```
 
 ### Frontend
@@ -37,7 +44,7 @@ npm install
 npm run dev
 ```
 
-The frontend expects the backend at `http://localhost:8000`.
+The frontend expects the backend at `http://localhost:18000` unless `VITE_API_BASE` is set.
 
 ### Frontend GitHub Pages Deploy
 
