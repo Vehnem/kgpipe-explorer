@@ -16,6 +16,14 @@ import {
 } from "@xyflow/react";
 import type { ExamplePipeline, TaskSpec } from "../api";
 import { fetchExamplePipelines } from "../api";
+import {
+  buildCliCommand,
+  buildPipelineConf,
+  extractTaskOrder,
+  slugifyPipelineName,
+  toPipelineJson,
+  toPipelineYaml
+} from "../pipelineExport";
 
 type PipelineNodeData = {
   label: string;
@@ -54,6 +62,12 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
 
   const [examples, setExamples] = useState<ExamplePipeline[]>([]);
   const [inspectedTask, setInspectedTask] = useState<TaskSpec | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+
+  const taskNodeCount = useMemo(
+    () => nodes.filter((node) => node.type === "taskNode").length,
+    [nodes]
+  );
 
   useEffect(() => {
     if (tasks.length === 0) {
@@ -404,6 +418,19 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         <h3>Loose Ends</h3>
         <p>Roots: {countRoots(nodes, edges)}</p>
         <p>Leaves: {countLeaves(nodes, edges)}</p>
+        <button
+          type="button"
+          className="primary-btn"
+          disabled={taskNodeCount === 0}
+          title={
+            taskNodeCount === 0
+              ? "Add task nodes to the canvas before exporting"
+              : "Export pipeline as pipeline.conf (YAML/JSON)"
+          }
+          onClick={() => setExportOpen(true)}
+        >
+          Export Pipeline Config
+        </button>
       </aside>
       <main className="builder-canvas" data-tutorial="builder-canvas">
         <ReactFlow
@@ -430,6 +457,181 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           onAddToCanvas={() => addNode(inspectedTask.name)}
         />
       )}
+
+      {exportOpen && (
+        <PipelineExportModal
+          nodes={nodes}
+          edges={edges}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline export modal
+// ---------------------------------------------------------------------------
+
+type PipelineExportModalProps = {
+  nodes: AnyNode[];
+  edges: Edge[];
+  onClose: () => void;
+};
+
+type ExportFormat = "yaml" | "json";
+
+function PipelineExportModal({ nodes, edges, onClose }: PipelineExportModalProps) {
+  const exportOrder = useMemo(() => extractTaskOrder(nodes, edges), [nodes, edges]);
+  const [pipelineName, setPipelineName] = useState("builder_pipeline");
+  const [description, setDescription] = useState(
+    "Pipeline exported from KGpipe Pipeline Editor"
+  );
+  const [format, setFormat] = useState<ExportFormat>("yaml");
+  const [copyHint, setCopyHint] = useState("");
+
+  const pipelineConf = useMemo(
+    () => buildPipelineConf(pipelineName, description, exportOrder.taskNames),
+    [pipelineName, description, exportOrder.taskNames]
+  );
+
+  const configText = useMemo(
+    () => (format === "yaml" ? toPipelineYaml(pipelineConf) : toPipelineJson(pipelineConf)),
+    [format, pipelineConf]
+  );
+
+  const cliCommand = useMemo(
+    () => buildCliCommand(pipelineName),
+    [pipelineName]
+  );
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  function handleBackdrop(e: React.MouseEvent) {
+    if (e.target === e.currentTarget) onClose();
+  }
+
+  async function copyText(label: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyHint(`${label} copied`);
+      window.setTimeout(() => setCopyHint(""), 1800);
+    } catch {
+      setCopyHint(`Could not copy ${label.toLowerCase()}`);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={handleBackdrop}>
+      <div
+        className="modal-card modal-card--wide"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Export pipeline configuration"
+      >
+        <div className="modal-header">
+          <h3>Export Pipeline Config</h3>
+          <button className="modal-close-btn" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
+
+        <div className="modal-body">
+          <div className="export-form-grid">
+            <label className="export-field">
+              <span>Pipeline name</span>
+              <input
+                type="text"
+                value={pipelineName}
+                onChange={(e) => setPipelineName(slugifyPipelineName(e.target.value))}
+                placeholder="builder_pipeline"
+              />
+            </label>
+            <label className="export-field">
+              <span>Description</span>
+              <input
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Pipeline exported from KGpipe Pipeline Editor"
+              />
+            </label>
+          </div>
+
+          {exportOrder.warnings.length > 0 && (
+            <div className="export-warnings">
+              {exportOrder.warnings.map((warning) => (
+                <p key={warning}>{warning}</p>
+              ))}
+            </div>
+          )}
+
+          <div className="modal-section">
+            <div className="export-section-head">
+              <h4>Configuration</h4>
+              <div className="export-format-toggle" role="tablist" aria-label="Config format">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={format === "yaml"}
+                  className={format === "yaml" ? "active" : ""}
+                  onClick={() => setFormat("yaml")}
+                >
+                  YAML
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={format === "json"}
+                  className={format === "json" ? "active" : ""}
+                  onClick={() => setFormat("json")}
+                >
+                  JSON
+                </button>
+                <button
+                  type="button"
+                  className="export-copy-btn"
+                  onClick={() => copyText("Config", configText)}
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+            <pre className="export-code-block">{configText}</pre>
+          </div>
+
+          <div className="modal-section">
+            <div className="export-section-head">
+              <h4>CLI command</h4>
+              <button
+                type="button"
+                className="export-copy-btn"
+                onClick={() => copyText("CLI command", cliCommand)}
+              >
+                Copy
+              </button>
+            </div>
+            <p className="export-cli-note">
+              Mock preview — the <code>kgpipe run</code> subcommand is not wired up yet.
+            </p>
+            <pre className="export-code-block export-code-block--cli">{cliCommand}</pre>
+          </div>
+
+          {copyHint ? <p className="export-copy-hint">{copyHint}</p> : null}
+        </div>
+
+        <div className="modal-footer">
+          <button type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ArtifactFile, ResultsArtifacts, TaskSpec } from "../api";
-import { fetchLeaderboardRunsTsv, fetchResultsArtifacts } from "../api";
+import type { ArtifactFile, BenchmarkRun, ResultsArtifacts, TaskSpec } from "../api";
+import {
+  fetchBenchmarkRuns,
+  fetchLeaderboardRunsTsv,
+  fetchResultsArtifacts
+} from "../api";
+import { PipelineName } from "../components/PipelineName";
+import { PipelineMetadataProvider } from "../context/PipelineMetadataContext";
 
 export type ResultsPageProps = {
   tasks: TaskSpec[];
@@ -117,8 +123,16 @@ function MetricsTable({ metricNames, pA, pB, getValue }: MetricsTableProps) {
         <thead>
           <tr>
             <th>Metric</th>
-            {pA && <th>{pA}</th>}
-            {pB && <th>{pB}</th>}
+            {pA && (
+              <th>
+                <PipelineName id={pA} />
+              </th>
+            )}
+            {pB && (
+              <th>
+                <PipelineName id={pB} />
+              </th>
+            )}
             {pA && pB && <th>&#916; (B &#8722; A)</th>}
           </tr>
         </thead>
@@ -221,7 +235,9 @@ function ArtifactsPanel({ pipelines, rows, artifacts, artifactsError }: Artifact
         const pipelineArtifacts = artifacts?.[p];
         return (
           <div key={p} className="results-artifact-card">
-            <h4 className="results-artifact-pipeline">{p}</h4>
+            <h4 className="results-artifact-pipeline">
+              <PipelineName id={p} />
+            </h4>
             {pipelineStages.length === 0 ? (
               <p className="muted">No stage data found.</p>
             ) : (
@@ -263,6 +279,9 @@ function ArtifactsPanel({ pipelines, rows, artifacts, artifactsError }: Artifact
 // ---------------------------------------------------------------------------
 
 export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
+  const [benchmarkRuns, setBenchmarkRuns] = useState<BenchmarkRun[]>([]);
+  const [selectedBenchmarkRunId, setSelectedBenchmarkRunId] = useState<string>("");
+
   const [tsvText, setTsvText] = useState<string>("");
   const [loadingError, setLoadingError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
@@ -278,7 +297,35 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
   const [selectedStage, setSelectedStage] = useState<string>("");
 
   useEffect(() => {
-    fetchLeaderboardRunsTsv()
+    fetchBenchmarkRuns()
+      .then((runs) => {
+        setBenchmarkRuns(runs);
+        if (runs.length > 0) {
+          setSelectedBenchmarkRunId(runs[0].id);
+        } else {
+          setLoading(false);
+          setLoadingError("No benchmark runs available");
+        }
+      })
+      .catch((err: unknown) => {
+        setLoadingError(
+          err instanceof Error ? err.message : "Failed to load benchmark runs"
+        );
+        setLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!selectedBenchmarkRunId) return;
+
+    setLoading(true);
+    setLoadingError("");
+    setArtifacts(null);
+    setArtifactsError("");
+    setSelectedPipelines([]);
+    setSelectedStage("");
+
+    fetchLeaderboardRunsTsv(selectedBenchmarkRunId)
       .then((tsv) => {
         setTsvText(tsv);
         setLoading(false);
@@ -288,14 +335,14 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
         setLoading(false);
       });
 
-    fetchResultsArtifacts()
+    fetchResultsArtifacts(selectedBenchmarkRunId)
       .then(setArtifacts)
       .catch((err: unknown) => {
         setArtifactsError(
           err instanceof Error ? err.message : "Failed to load artifact data"
         );
       });
-  }, []);
+  }, [selectedBenchmarkRunId]);
 
   const { rows, metricNames } = useMemo(() => parseTsv(tsvText), [tsvText]);
 
@@ -336,7 +383,10 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
     return row?.metrics[metric] ?? null;
   };
 
+  const selectedBenchmarkRun = benchmarkRuns.find((run) => run.id === selectedBenchmarkRunId);
+
   return (
+    <PipelineMetadataProvider runId={selectedBenchmarkRunId}>
     <section className="page-scaffold">
       <header className="page-header">
         <h2>Pipeline Results</h2>
@@ -347,6 +397,37 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
       </header>
 
       {loadingError && <p className="error-banner">{loadingError}</p>}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Benchmark run selector                                             */}
+      {/* ------------------------------------------------------------------ */}
+      {benchmarkRuns.length > 0 && (
+        <div className="results-section" data-tutorial="results-benchmark">
+          <div className="results-section-header">
+            <h3>Benchmark Run</h3>
+            {selectedBenchmarkRun && (
+              <span className="muted" style={{ fontSize: 12 }}>
+                {selectedBenchmarkRun.description}
+              </span>
+            )}
+          </div>
+          <label className="results-benchmark-select-label" htmlFor="benchmark-run-select">
+            Dataset
+          </label>
+          <select
+            id="benchmark-run-select"
+            className="results-benchmark-select"
+            value={selectedBenchmarkRunId}
+            onChange={(e) => setSelectedBenchmarkRunId(e.target.value)}
+          >
+            {benchmarkRuns.map((run) => (
+              <option key={run.id} value={run.id} title={run.description}>
+                {run.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* ------------------------------------------------------------------ */}
       {/* Pipeline picker                                                      */}
@@ -373,12 +454,11 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
                   type="button"
                   className={`results-pipeline-btn${isSelected ? " selected" : ""}`}
                   onClick={() => togglePipeline(p)}
-                  title={isSelected ? `Deselect ${p}` : `Select ${p}`}
                 >
                   {isSelected && (
                     <span className="results-pipeline-index">{selIdx + 1}</span>
                   )}
-                  {p}
+                  <PipelineName id={p} />
                 </button>
               );
             })}
@@ -481,5 +561,6 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
         </div>
       )}
     </section>
+    </PipelineMetadataProvider>
   );
 }

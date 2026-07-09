@@ -26,6 +26,33 @@ export type ArtifactFile = {
 /** { pipeline_id: { stage_id: ArtifactFile[] } } */
 export type ResultsArtifacts = Record<string, Record<string, ArtifactFile[]>>;
 
+export type BenchmarkRun = {
+  id: string;
+  name: string;
+  description: string;
+};
+
+export type PipelineStepMetadata = {
+  step_number: number;
+  task_family: string;
+  task_name: string;
+  description: string;
+};
+
+export type PipelineMetadata = {
+  id: string;
+  uri: string;
+  display_name: string;
+  kind: "atomic" | "composite";
+  description: string;
+  task_sequence: string[];
+  steps: PipelineStepMetadata[];
+  variant?: string | null;
+};
+
+/** pipeline_id → metadata */
+export type PipelineMetadataMap = Record<string, PipelineMetadata>;
+
 export type ExamplePipelineNode = {
   id: string;
   task_name: string;
@@ -106,8 +133,38 @@ export async function saveSparqlExample(payload: SavedSparqlExample): Promise<Sa
   return (await res.json()) as SavedSparqlExample;
 }
 
-export async function fetchLeaderboardRunsTsv(): Promise<string> {
-  const res = await fetch(`${API_BASE}/leaderboard/runs`);
+export async function fetchPipelineMetadata(
+  runId?: string,
+  ids?: string[]
+): Promise<PipelineMetadataMap> {
+  const url = new URL(`${API_BASE}/pipelines/metadata`);
+  if (runId) {
+    url.searchParams.set("run_id", runId);
+  }
+  if (ids && ids.length > 0) {
+    url.searchParams.set("ids", ids.join(","));
+  }
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch pipeline metadata (${res.status})`);
+  }
+  return (await res.json()) as PipelineMetadataMap;
+}
+
+export async function fetchBenchmarkRuns(): Promise<BenchmarkRun[]> {
+  const res = await fetch(`${API_BASE}/benchmarks/runs`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch benchmark runs (${res.status})`);
+  }
+  return (await res.json()) as BenchmarkRun[];
+}
+
+export async function fetchLeaderboardRunsTsv(runId?: string): Promise<string> {
+  const url = new URL(`${API_BASE}/leaderboard/runs`);
+  if (runId) {
+    url.searchParams.set("run_id", runId);
+  }
+  const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Failed to fetch leaderboard runs (${res.status})`);
   }
@@ -126,8 +183,12 @@ export async function fetchExamplePipelines(): Promise<ExamplePipeline[]> {
   return (await res.json()) as ExamplePipeline[];
 }
 
-export async function fetchResultsArtifacts(): Promise<ResultsArtifacts> {
-  const res = await fetch(`${API_BASE}/results/artifacts`);
+export async function fetchResultsArtifacts(runId?: string): Promise<ResultsArtifacts> {
+  const url = new URL(`${API_BASE}/results/artifacts`);
+  if (runId) {
+    url.searchParams.set("run_id", runId);
+  }
+  const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Failed to fetch results artifacts (${res.status})`);
   }

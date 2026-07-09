@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import type { TaskSpec } from "../api";
-import { fetchLeaderboardRunsTsv } from "../api";
+import type { BenchmarkRun, TaskSpec } from "../api";
+import { fetchBenchmarkRuns, fetchLeaderboardRunsTsv } from "../api";
+import { PipelineName } from "../components/PipelineName";
+import {
+  formatPipelineMetadataTooltip,
+  PipelineMetadataProvider,
+  usePipelineMetadata
+} from "../context/PipelineMetadataContext";
 
 type PipelineLeaderboardPageProps = {
   tasks: TaskSpec[];
@@ -70,6 +76,7 @@ type RankDistributionPreview = {
 
 type CompactConfig = {
   v: number;
+  br?: string;
   f?: string;
   sa?: string;
   pm?: string;
@@ -77,6 +84,8 @@ type CompactConfig = {
   m?: Record<string, [number, string, string, string]>;
   p?: [string, ...string[]];
 };
+
+const DEFAULT_BENCHMARK_RUN_ID = "kgi-bench-movie";
 
 const DEFAULT_GROUPS: GroupConfig[] = [
   { id: "coverage", label: "Coverage", aggregator: "mean", weight: 1 },
@@ -86,6 +95,9 @@ const DEFAULT_GROUPS: GroupConfig[] = [
 const CFG_VERSION = 1;
 
 export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps) {
+  const [benchmarkRuns, setBenchmarkRuns] = useState<BenchmarkRun[]>([]);
+  const [selectedBenchmarkRunId, setSelectedBenchmarkRunId] = useState<string>("");
+
   const [tsvText, setTsvText] = useState<string>("");
   const [loadingError, setLoadingError] = useState<string>("");
   const [stageAggregatorAll, setStageAggregatorAll] = useState<AggregationMethod>("mean");
@@ -100,7 +112,38 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
   const [urlConfigHydrated, setUrlConfigHydrated] = useState<boolean>(false);
 
   useEffect(() => {
-    fetchLeaderboardRunsTsv()
+    const params = new URLSearchParams(window.location.search);
+    const encoded = params.get("cfg");
+    let urlBenchmarkId: string | null = null;
+    if (encoded) {
+      const decoded = decodeCompactConfig(encoded);
+      if (decoded?.br) {
+        urlBenchmarkId = decoded.br;
+      }
+    }
+
+    fetchBenchmarkRuns()
+      .then((runs) => {
+        setBenchmarkRuns(runs);
+        const validIds = new Set(runs.map((run) => run.id));
+        if (urlBenchmarkId && validIds.has(urlBenchmarkId)) {
+          setSelectedBenchmarkRunId(urlBenchmarkId);
+        } else if (runs.length > 0) {
+          setSelectedBenchmarkRunId(runs[0].id);
+        }
+      })
+      .catch((error: unknown) => {
+        const message =
+          error instanceof Error ? error.message : "Failed to load benchmark runs";
+        setLoadingError(message);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!selectedBenchmarkRunId) {
+      return;
+    }
+    fetchLeaderboardRunsTsv(selectedBenchmarkRunId)
       .then((text) => {
         setTsvText(text);
         setLoadingError("");
@@ -110,7 +153,13 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
           error instanceof Error ? error.message : "Failed to load runs.tsv";
         setLoadingError(message);
       });
-  }, []);
+  }, [selectedBenchmarkRunId]);
+
+  function handleBenchmarkRunChange(runId: string) {
+    setSelectedBenchmarkRunId(runId);
+    setPipelineSelectionFromUrl(false);
+    setSelectedPipelines([]);
+  }
 
   const table = useMemo(() => parseTsv(tsvText), [tsvText]);
   const columns = table.headers;
@@ -318,6 +367,7 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
       return;
     }
     const encoded = encodeCompactConfig({
+      benchmarkRunId: selectedBenchmarkRunId,
       finalAggregator,
       stageAggregatorAll,
       previewMode,
@@ -341,6 +391,7 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
     }
   }, [
     urlConfigHydrated,
+    selectedBenchmarkRunId,
     finalAggregator,
     stageAggregatorAll,
     previewMode,
@@ -351,7 +402,10 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
     availablePipelines
   ]);
 
+  const selectedBenchmarkRun = benchmarkRuns.find((run) => run.id === selectedBenchmarkRunId);
+
   return (
+    <PipelineMetadataProvider runId={selectedBenchmarkRunId}>
     <section className="page-scaffold">
       <header className="page-header">
         <h2>Pipeline Leaderboard</h2>
@@ -360,6 +414,34 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
           scores into a final rank.
         </p>
       </header>
+
+      {benchmarkRuns.length > 0 && (
+        <div className="results-section" data-tutorial="leaderboard-benchmark">
+          <div className="results-section-header">
+            <h3>Benchmark Run</h3>
+            {selectedBenchmarkRun && (
+              <span className="muted" style={{ fontSize: 12 }}>
+                {selectedBenchmarkRun.description}
+              </span>
+            )}
+          </div>
+          <label className="results-benchmark-select-label" htmlFor="leaderboard-benchmark-run-select">
+            Dataset
+          </label>
+          <select
+            id="leaderboard-benchmark-run-select"
+            className="results-benchmark-select"
+            value={selectedBenchmarkRunId}
+            onChange={(event) => handleBenchmarkRunChange(event.target.value)}
+          >
+            {benchmarkRuns.map((run) => (
+              <option key={run.id} value={run.id} title={run.description}>
+                {run.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="leaderboard-summary" data-tutorial="leaderboard-summary">
         <div className="stat-card">
@@ -468,7 +550,9 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
                         })
                       }
                     />
-                    <span>{pipeline}</span>
+                    <span>
+                      <PipelineName id={pipeline} />
+                    </span>
                   </label>
                 );
               })}
@@ -764,7 +848,9 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
                   {rankedPipelines.map((item, idx) => (
                     <tr key={item.pipeline}>
                       <td>{idx + 1}</td>
-                      <td>{item.pipeline}</td>
+                      <td>
+                        <PipelineName id={item.pipeline} />
+                      </td>
                       <td>{formatScore(item.finalScore)}</td>
                       {groupConfigs.map((group) => (
                         <td key={`${item.pipeline}-${group.id}`}>
@@ -797,7 +883,9 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
                 <tbody>
                   {rankDistribution.rows.map((row) => (
                     <tr key={row.pipeline}>
-                      <td>{row.pipeline}</td>
+                      <td>
+                        <PipelineName id={row.pipeline} />
+                      </td>
                       <td>
                         <div className="rank-dist-track">
                           <div
@@ -893,7 +981,9 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
             {filteredRows.map((row) => (
               <tr key={row.key}>
                 {row.values.map((value, idx) => (
-                  <td key={`${row.key}-${columns[idx]}`}>{value}</td>
+                  <td key={`${row.key}-${columns[idx]}`}>
+                    {columns[idx] === "pipeline" ? <PipelineName id={value} /> : value}
+                  </td>
                 ))}
               </tr>
             ))}
@@ -915,6 +1005,7 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
         </table>
       </div>
     </section>
+    </PipelineMetadataProvider>
   );
 }
 
@@ -1191,6 +1282,24 @@ function rankToPercent(rank: number, maxRank: number): number {
   return ((rank - 1) / (maxRank - 1)) * 100;
 }
 
+function HeatmapPipelineLabel({
+  pipeline,
+  x,
+  y
+}: {
+  pipeline: string;
+  x: number;
+  y: number;
+}) {
+  const metadata = usePipelineMetadata(pipeline);
+  return (
+    <text x={x} y={y} textAnchor="end" className="rank-axis-label">
+      {metadata && <title>{formatPipelineMetadataTooltip(metadata)}</title>}
+      {truncateLabel(pipeline, 12)}
+    </text>
+  );
+}
+
 function RankDistributionFigure({ preview }: { preview: RankDistributionPreview }) {
   const width = 760;
   const height = 280;
@@ -1273,7 +1382,9 @@ function RankDistributionFigure({ preview }: { preview: RankDistributionPreview 
               className="rank-legend-color"
               style={{ backgroundColor: pipelineColor(rowIdx) }}
             />
-            <span>{row.pipeline}</span>
+            <span>
+              <PipelineName id={row.pipeline} />
+            </span>
           </div>
         ))}
       </div>
@@ -1379,7 +1490,9 @@ function RankDistributionBars({ preview }: { preview: RankDistributionPreview })
               className="rank-legend-color"
               style={{ backgroundColor: pipelineColor(rowIdx) }}
             />
-            <span>{row.pipeline}</span>
+            <span>
+              <PipelineName id={row.pipeline} />
+            </span>
           </div>
         ))}
       </div>
@@ -1410,14 +1523,7 @@ function RankDistributionHeatmap({ preview }: { preview: RankDistributionPreview
       >
         {preview.rows.map((row, rowIdx) => (
           <g key={`heat-row-${row.pipeline}`}>
-            <text
-              x={margin.left - 6}
-              y={margin.top + rowIdx * rowHeight + rowHeight * 0.66}
-              textAnchor="end"
-              className="rank-axis-label"
-            >
-              {truncateLabel(row.pipeline, 12)}
-            </text>
+            <HeatmapPipelineLabel pipeline={row.pipeline} y={margin.top + rowIdx * rowHeight + rowHeight * 0.66} x={margin.left - 6} />
             {row.rankCounts.map((count, rankIdx) => (
               <rect
                 key={`heat-${row.pipeline}-${rankIdx + 1}`}
@@ -1476,6 +1582,7 @@ function truncateLabel(label: string, maxLength: number): string {
 }
 
 function encodeCompactConfig(input: {
+  benchmarkRunId: string;
   finalAggregator: FinalAggregationMethod;
   stageAggregatorAll: AggregationMethod;
   previewMode: PreviewMode;
@@ -1486,6 +1593,13 @@ function encodeCompactConfig(input: {
   availablePipelines: string[];
 }): string | null {
   const cfg: CompactConfig = { v: CFG_VERSION };
+
+  if (
+    input.benchmarkRunId &&
+    input.benchmarkRunId !== DEFAULT_BENCHMARK_RUN_ID
+  ) {
+    cfg.br = input.benchmarkRunId;
+  }
 
   if (input.finalAggregator !== "weighted_mean") {
     cfg.f = finalAggregatorToCode(input.finalAggregator);
