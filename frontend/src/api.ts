@@ -1,11 +1,39 @@
+export type DataPortSpec = {
+  name: string;
+  format: string;
+};
+
+export type ParameterSpec = {
+  uri?: string;
+  name: string;
+  datatype: string;
+  required?: boolean;
+  default_value?: string | number | boolean | null;
+  allowed_values?: Array<string | number | boolean>;
+  alias_keys?: string[];
+  minimum?: number | null;
+  maximum?: number | null;
+  unit?: string | null;
+};
+
+export type ConfigSpec = {
+  uri?: string;
+  name: string;
+  description?: string | null;
+  parameters: ParameterSpec[];
+};
+
 export type TaskSpec = {
   uri?: string;
   name: string;
   inputs: string[];
   outputs: string[];
+  input_ports?: DataPortSpec[];
+  output_ports?: DataPortSpec[];
   implements_method?: string[];
   uses_tool?: string[];
   has_parameter?: string[];
+  config_spec?: ConfigSpec | null;
 };
 
 export type SparqlConstructResponse = Record<string, unknown>;
@@ -63,6 +91,8 @@ export type ExamplePipelineNode = {
   node_type?: string;   // "taskNode" (default) | "dataNode"
   format?: string;      // dataNode: format string, e.g. "txt", "ttl"
   data_kind?: string;   // dataNode: "source" | "sink"
+  input_ports?: DataPortSpec[];
+  output_ports?: DataPortSpec[];
 };
 
 export type ExamplePipelineEdge = {
@@ -79,6 +109,43 @@ export type ExamplePipeline = {
   description: string;
   nodes: ExamplePipelineNode[];
   edges: ExamplePipelineEdge[];
+};
+
+export type DataElement = {
+  label: string;
+  format: string;
+  data_kind: "source" | "sink";
+};
+
+export type EntityTypeInfo = {
+  id: string;
+  label: string;
+  prefixed: string;
+};
+
+export type EntityTypesResponse = {
+  types: EntityTypeInfo[];
+  discovery_query: string;
+};
+
+export type LeaderboardGroupConfig = {
+  id: string;
+  label: string;
+  aggregator: string;
+  weight: number;
+};
+
+export type MetricGroupRule = {
+  match: "exact" | "prefix" | string;
+  value: string;
+  group_id: string;
+};
+
+export type LeaderboardDefaults = {
+  groups: LeaderboardGroupConfig[];
+  metric_group_rules: MetricGroupRule[];
+  fallback_group_id: string;
+  default_benchmark_run_id: string;
 };
 
 const API_BASE =
@@ -193,4 +260,36 @@ export async function fetchResultsArtifacts(runId?: string): Promise<ResultsArti
     throw new Error(`Failed to fetch results artifacts (${res.status})`);
   }
   return (await res.json()) as ResultsArtifacts;
+}
+
+export async function fetchDataElements(): Promise<DataElement[]> {
+  const res = await fetch(`${API_BASE}/builder/data-elements`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch data elements (${res.status})`);
+  }
+  return (await res.json()) as DataElement[];
+}
+
+export async function fetchBuiltinSparqlExamples(): Promise<SavedSparqlExample[]> {
+  const res = await fetch(`${API_BASE}/sparql/examples/builtin`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch builtin SPARQL examples (${res.status})`);
+  }
+  return (await res.json()) as SavedSparqlExample[];
+}
+
+export async function fetchEntityTypes(): Promise<EntityTypesResponse> {
+  const res = await fetch(`${API_BASE}/ontology/entity-types`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch entity types (${res.status})`);
+  }
+  return (await res.json()) as EntityTypesResponse;
+}
+
+export async function fetchLeaderboardDefaults(): Promise<LeaderboardDefaults> {
+  const res = await fetch(`${API_BASE}/leaderboard/defaults`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch leaderboard defaults (${res.status})`);
+  }
+  return (await res.json()) as LeaderboardDefaults;
 }

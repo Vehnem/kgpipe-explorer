@@ -278,7 +278,37 @@ body,
 .task-node-title {
   font-size: 13px;
   font-weight: 700;
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.task-node-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
   margin-bottom: 6px;
+}
+
+.task-node-settings-btn {
+  flex-shrink: 0;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  line-height: 1;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.task-node-settings-btn:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
 }
 
 .task-node-io {
@@ -286,6 +316,32 @@ body,
   color: #374151;
   display: grid;
   gap: 4px;
+}
+
+.task-node-params {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed #e2e8f0;
+  display: grid;
+  gap: 2px;
+}
+
+.task-node-param {
+  font-size: 10px;
+  line-height: 1.35;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-node-param-name {
+  color: #475569;
+}
+
+.task-node-param-value {
+  color: #0f172a;
 }
 
 .fmt-badge {
@@ -446,6 +502,117 @@ body,
   color: #475569;
   word-break: break-all;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+.param-options-list {
+  display: grid;
+  gap: 8px;
+}
+
+.param-spec-description {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.param-option-row {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.param-option-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.param-option-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.param-option-type,
+.param-field-type {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.param-option-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.param-option-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.param-required {
+  color: #b91c1c;
+  margin-left: 2px;
+}
+
+.task-config-panel {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  display: grid;
+  gap: 8px;
+}
+
+.task-config-panel h4 {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #475569;
+}
+
+.task-config-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.param-field {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: #0f172a;
+}
+
+.param-field input,
+.param-field select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.param-field-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.param-field-checkbox input {
+  width: auto;
+}
+
+.param-field-unit {
+  font-size: 11px;
+  color: #64748b;
 }
 
 .modal-footer {

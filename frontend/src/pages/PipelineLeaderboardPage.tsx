@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import type { BenchmarkRun, TaskSpec } from "../api";
-import { fetchBenchmarkRuns, fetchLeaderboardRunsTsv } from "../api";
+import type {
+  BenchmarkRun,
+  LeaderboardDefaults,
+  MetricGroupRule,
+  TaskSpec
+} from "../api";
+import {
+  fetchBenchmarkRuns,
+  fetchLeaderboardDefaults,
+  fetchLeaderboardRunsTsv
+} from "../api";
 import { PipelineName } from "../components/PipelineName";
 import {
   formatPipelineMetadataTooltip,
@@ -85,31 +94,61 @@ type CompactConfig = {
   p?: [string, ...string[]];
 };
 
-const DEFAULT_BENCHMARK_RUN_ID = "kgi-bench-movie";
-
-const DEFAULT_GROUPS: GroupConfig[] = [
-  { id: "coverage", label: "Coverage", aggregator: "mean", weight: 1 },
-  { id: "accuracy", label: "Accuracy", aggregator: "mean", weight: 1 },
-  { id: "consistency", label: "Consistency", aggregator: "mean", weight: 1 }
-];
 const CFG_VERSION = 1;
+
+function isAggregationMethod(value: string): value is AggregationMethod {
+  return (
+    value === "mean" ||
+    value === "harmonic_mean" ||
+    value === "min" ||
+    value === "max"
+  );
+}
+
+function groupsFromDefaults(defaults: LeaderboardDefaults | null): GroupConfig[] {
+  if (!defaults) {
+    return [];
+  }
+  return defaults.groups
+    .filter((group) => isAggregationMethod(group.aggregator))
+    .map((group) => ({
+      id: group.id,
+      label: group.label,
+      aggregator: group.aggregator as AggregationMethod,
+      weight: group.weight
+    }));
+}
 
 export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps) {
   const [benchmarkRuns, setBenchmarkRuns] = useState<BenchmarkRun[]>([]);
   const [selectedBenchmarkRunId, setSelectedBenchmarkRunId] = useState<string>("");
+  const [leaderboardDefaults, setLeaderboardDefaults] =
+    useState<LeaderboardDefaults | null>(null);
 
   const [tsvText, setTsvText] = useState<string>("");
   const [loadingError, setLoadingError] = useState<string>("");
   const [stageAggregatorAll, setStageAggregatorAll] = useState<AggregationMethod>("mean");
   const [finalAggregator, setFinalAggregator] =
     useState<FinalAggregationMethod>("weighted_mean");
-  const [groupConfigs, setGroupConfigs] = useState<GroupConfig[]>(DEFAULT_GROUPS);
+  const [groupConfigs, setGroupConfigs] = useState<GroupConfig[]>([]);
   const [metricSettings, setMetricSettings] = useState<Record<string, MetricSetting>>({});
   const [selectedPipelines, setSelectedPipelines] = useState<string[]>([]);
   const [pipelineSelectionFromUrl, setPipelineSelectionFromUrl] =
     useState<boolean>(false);
   const [previewMode, setPreviewMode] = useState<PreviewMode>("table");
   const [urlConfigHydrated, setUrlConfigHydrated] = useState<boolean>(false);
+
+  const defaultGroups = useMemo(
+    () => groupsFromDefaults(leaderboardDefaults),
+    [leaderboardDefaults]
+  );
+  const defaultBenchmarkRunId =
+    leaderboardDefaults?.default_benchmark_run_id ?? "";
+  const metricGroupRules = useMemo(
+    () => leaderboardDefaults?.metric_group_rules ?? [],
+    [leaderboardDefaults]
+  );
+  const fallbackGroupId = leaderboardDefaults?.fallback_group_id ?? "none";
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -122,12 +161,17 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
       }
     }
 
-    fetchBenchmarkRuns()
-      .then((runs) => {
+    Promise.all([fetchBenchmarkRuns(), fetchLeaderboardDefaults()])
+      .then(([runs, defaults]) => {
         setBenchmarkRuns(runs);
+        setLeaderboardDefaults(defaults);
+        const groups = groupsFromDefaults(defaults);
+        setGroupConfigs(groups);
         const validIds = new Set(runs.map((run) => run.id));
         if (urlBenchmarkId && validIds.has(urlBenchmarkId)) {
           setSelectedBenchmarkRunId(urlBenchmarkId);
+        } else if (defaults.default_benchmark_run_id && validIds.has(defaults.default_benchmark_run_id)) {
+          setSelectedBenchmarkRunId(defaults.default_benchmark_run_id);
         } else if (runs.length > 0) {
           setSelectedBenchmarkRunId(runs[0].id);
         }
@@ -175,14 +219,14 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
       for (const metric of metricColumns) {
         next[metric] = current[metric] ?? {
           enabled: true,
-          groupId: defaultGroupForMetric(metric),
+          groupId: defaultGroupForMetric(metric, metricGroupRules, fallbackGroupId),
           stageAggregator: "mean",
           stageSelection: "all"
         };
       }
       return next;
     });
-  }, [metricColumns]);
+  }, [metricColumns, metricGroupRules, fallbackGroupId]);
 
   const availablePipelines = useMemo(
     () => Array.from(new Set(rows.map((row) => row.pipeline))).sort(),
@@ -262,7 +306,7 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
         for (const metric of metricColumns) {
           const fallback = current[metric] ?? {
             enabled: true,
-            groupId: defaultGroupForMetric(metric),
+            groupId: defaultGroupForMetric(metric, metricGroupRules, fallbackGroupId),
             stageAggregator: "mean",
             stageSelection: "all"
           };
@@ -284,7 +328,13 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
       });
     }
     setUrlConfigHydrated(true);
-  }, [urlConfigHydrated, metricColumns, availablePipelines]);
+  }, [
+    urlConfigHydrated,
+    metricColumns,
+    availablePipelines,
+    metricGroupRules,
+    fallbackGroupId
+  ]);
 
   useEffect(() => {
     const validGroupIds = new Set(groupConfigs.map((group) => group.id));
@@ -375,7 +425,11 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
       metricColumns,
       metricSettings,
       selectedPipelines,
-      availablePipelines
+      availablePipelines,
+      defaultBenchmarkRunId,
+      defaultGroups,
+      metricGroupRules,
+      fallbackGroupId
     });
     const params = new URLSearchParams(window.location.search);
     if (encoded) {
@@ -399,7 +453,11 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
     metricColumns,
     metricSettings,
     selectedPipelines,
-    availablePipelines
+    availablePipelines,
+    defaultBenchmarkRunId,
+    defaultGroups,
+    metricGroupRules,
+    fallbackGroupId
   ]);
 
   const selectedBenchmarkRun = benchmarkRuns.find((run) => run.id === selectedBenchmarkRunId);
@@ -679,7 +737,11 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
                   {metricColumns.map((metric) => {
                     const setting = metricSettings[metric] ?? {
                       enabled: true,
-                      groupId: defaultGroupForMetric(metric),
+                      groupId: defaultGroupForMetric(
+                        metric,
+                        metricGroupRules,
+                        fallbackGroupId
+                      ),
                       stageAggregator: "mean",
                       stageSelection: "all"
                     };
@@ -1068,17 +1130,20 @@ function parseTsv(tsv: string): LeaderboardTable {
   return { headers, metricColumns: filteredMetricColumns, rows };
 }
 
-function defaultGroupForMetric(metric: string): MetricGroupId {
-  if (metric === "ACC_T") {
-    return "accuracy";
+function defaultGroupForMetric(
+  metric: string,
+  rules: MetricGroupRule[],
+  fallbackGroupId: string
+): MetricGroupId {
+  for (const rule of rules) {
+    if (rule.match === "exact" && metric === rule.value) {
+      return rule.group_id;
+    }
+    if (rule.match === "prefix" && metric.startsWith(rule.value)) {
+      return rule.group_id;
+    }
   }
-  if (metric.startsWith("COV_")) {
-    return "coverage";
-  }
-  if (metric === "1-DR" || metric.startsWith("O_")) {
-    return "consistency";
-  }
-  return "none";
+  return fallbackGroupId;
 }
 
 function computePipelineGroupScores(
@@ -1591,12 +1656,16 @@ function encodeCompactConfig(input: {
   metricSettings: Record<string, MetricSetting>;
   selectedPipelines: string[];
   availablePipelines: string[];
+  defaultBenchmarkRunId: string;
+  defaultGroups: GroupConfig[];
+  metricGroupRules: MetricGroupRule[];
+  fallbackGroupId: string;
 }): string | null {
   const cfg: CompactConfig = { v: CFG_VERSION };
 
   if (
     input.benchmarkRunId &&
-    input.benchmarkRunId !== DEFAULT_BENCHMARK_RUN_ID
+    input.benchmarkRunId !== input.defaultBenchmarkRunId
   ) {
     cfg.br = input.benchmarkRunId;
   }
@@ -1610,7 +1679,7 @@ function encodeCompactConfig(input: {
   if (input.previewMode !== "table") {
     cfg.pm = previewModeToCode(input.previewMode);
   }
-  if (!sameGroups(input.groupConfigs, DEFAULT_GROUPS)) {
+  if (!sameGroups(input.groupConfigs, input.defaultGroups)) {
     cfg.g = input.groupConfigs.map((group) => [
       group.id,
       group.label,
@@ -1627,7 +1696,11 @@ function encodeCompactConfig(input: {
     }
     const defaultSetting: MetricSetting = {
       enabled: true,
-      groupId: defaultGroupForMetric(metric),
+      groupId: defaultGroupForMetric(
+        metric,
+        input.metricGroupRules,
+        input.fallbackGroupId
+      ),
       stageAggregator: "mean",
       stageSelection: "all"
     };

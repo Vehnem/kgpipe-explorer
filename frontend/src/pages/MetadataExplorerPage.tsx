@@ -3,8 +3,11 @@ import cola from "cytoscape-cola";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   constructSparql,
+  fetchBuiltinSparqlExamples,
+  fetchEntityTypes,
   fetchSavedSparqlExamples,
   saveSparqlExample,
+  type EntityTypeInfo,
   type SavedSparqlExample,
   type TaskSpec
 } from "../api";
@@ -49,12 +52,7 @@ type QueryTriple = {
   o: QueryTerm;
 };
 
-type EntityTypeId =
-  | "http://github.com/ScaDS/kgpipe/ontology/Task"
-  | "http://github.com/ScaDS/kgpipe/ontology/TaskRun"
-  | "http://github.com/ScaDS/kgpipe/ontology/Implementation"
-  | "http://github.com/ScaDS/kgpipe/ontology/Metric"
-  | "http://github.com/ScaDS/kgpipe/ontology/MetricRun";
+type EntityTypeId = string;
 
 type EntityTypeFilter = "all" | EntityTypeId;
 
@@ -314,105 +312,6 @@ type ExampleQuery = {
   query: string;
 };
 
-const BUILTIN_EXAMPLE_QUERIES: ExampleQuery[] = [
-  {
-    label: "All triples (sample, limit 20)",
-    query: "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 20"
-  },
-  {
-    label: "All task implementations",
-    query: `PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>
-CONSTRUCT { ?impl ?p ?o }
-WHERE {
-  ?impl a kgo:Implementation ;
-        ?p ?o .
-} LIMIT 60`
-  },
-  {
-    label: "Tasks and their tools",
-    query: `PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>
-PREFIX kgr: <http://github.com/ScaDS/kgpipe/resource/>
-CONSTRUCT { ?impl kgo:usesTool ?tool }
-WHERE {
-  ?impl a kgo:Implementation ;
-        kgo:usesTool ?tool .
-} LIMIT 80`
-  },
-  {
-    label: "Tasks and their implemented methods",
-    query: `PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>
-CONSTRUCT { ?impl kgo:implementsMethod ?method }
-WHERE {
-  ?impl a kgo:Implementation ;
-        kgo:implementsMethod ?method .
-} LIMIT 80`
-  },
-  {
-    label: "Tasks and their parameters",
-    query: `PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>
-CONSTRUCT { ?impl kgo:hasParameter ?param }
-WHERE {
-  ?impl a kgo:Implementation ;
-        kgo:hasParameter ?param .
-} LIMIT 80`
-  },
-  {
-    label: "Tasks with inputs and outputs",
-    query: `PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>
-CONSTRUCT { ?impl ?rel ?format }
-WHERE {
-  ?impl a kgo:Implementation .
-  { ?impl kgo:hasInput ?format . BIND(kgo:hasInput AS ?rel) }
-  UNION
-  { ?impl kgo:hasOutput ?format . BIND(kgo:hasOutput AS ?rel) }
-} LIMIT 100`
-  },
-  {
-    label: "Full neighbourhood of one task (limit 1)",
-    query: `PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>
-CONSTRUCT { ?impl ?p ?o }
-WHERE {
-  ?impl a kgo:Implementation ; ?p ?o .
-} LIMIT 30`
-  }
-];
-
-const ENTITY_TYPES: Array<{ id: EntityTypeId; label: string; prefixed: string }> = [
-  {
-    id: "http://github.com/ScaDS/kgpipe/ontology/Task",
-    label: "Tasks",
-    prefixed: "kgo:Task"
-  },
-  {
-    id: "http://github.com/ScaDS/kgpipe/ontology/TaskRun",
-    label: "Task Runs",
-    prefixed: "kgo:TaskRun"
-  },
-  {
-    id: "http://github.com/ScaDS/kgpipe/ontology/Implementation",
-    label: "Implementations",
-    prefixed: "kgo:Implementation"
-  },
-  {
-    id: "http://github.com/ScaDS/kgpipe/ontology/Metric",
-    label: "Metrics",
-    prefixed: "kgo:Metric"
-  },
-  {
-    id: "http://github.com/ScaDS/kgpipe/ontology/MetricRun",
-    label: "Metric Runs",
-    prefixed: "kgo:MetricRun"
-  }
-];
-
-const ENTITY_TYPE_LABEL_BY_ID: Record<EntityTypeId, string> = {
-  "http://github.com/ScaDS/kgpipe/ontology/Task": "Tasks",
-  "http://github.com/ScaDS/kgpipe/ontology/TaskRun": "Task Runs",
-  "http://github.com/ScaDS/kgpipe/ontology/Implementation": "Implementations",
-  "http://github.com/ScaDS/kgpipe/ontology/Metric": "Metrics",
-  "http://github.com/ScaDS/kgpipe/ontology/MetricRun": "Metric Runs"
-};
-
 const RDF_TYPE_URI = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const RDFS_LABEL_URI = "http://www.w3.org/2000/01/rdf-schema#label";
 
@@ -478,24 +377,6 @@ function buildEntitySummaryFromConstruct(
   return { id: entityId, label, typeUris: [...typeUris].sort() };
 }
 
-const ENTITY_DISCOVERY_QUERY = `PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-CONSTRUCT {
-  ?entity a ?type .
-  ?entity rdfs:label ?label .
-}
-WHERE {
-  VALUES ?type {
-    kgo:Task
-    kgo:TaskRun
-    kgo:Implementation
-    kgo:Metric
-    kgo:MetricRun
-  }
-  ?entity a ?type .
-  OPTIONAL { ?entity rdfs:label ?label . }
-}`;
-
 const GRAPH_LAYOUT_OPTIONS: Array<{ value: GraphLayoutName; label: string }> = [
   { value: "cose", label: "Force-directed (CoSE)" },
   { value: "breadthfirst", label: "Breadthfirst" },
@@ -547,15 +428,23 @@ function runLayout(cy: cytoscape.Core, layoutName: GraphLayoutName, dynamicForce
   }
 }
 
-function isEntityTypeId(value: string): value is EntityTypeId {
-  return ENTITY_TYPES.some((type) => type.id === value);
+function isEntityTypeId(
+  value: string,
+  entityTypes: EntityTypeInfo[]
+): value is EntityTypeId {
+  return entityTypes.some((type) => type.id === value);
 }
 
-function buildEntitiesFromConstruct(result: Record<string, unknown>): ExplorerEntity[] {
+function buildEntitiesFromConstruct(
+  result: Record<string, unknown>,
+  entityTypes: EntityTypeInfo[]
+): ExplorerEntity[] {
   const maybeResults = (result as { results?: unknown }).results;
   if (!maybeResults || typeof maybeResults !== "object") return [];
   const maybeBindings = (maybeResults as { bindings?: unknown }).bindings;
   if (!Array.isArray(maybeBindings)) return [];
+
+  const labelById = Object.fromEntries(entityTypes.map((type) => [type.id, type.label]));
 
   const entityMap = new Map<string, { typeId?: EntityTypeId; label?: string }>();
   for (const row of maybeBindings) {
@@ -566,7 +455,11 @@ function buildEntitiesFromConstruct(result: Record<string, unknown>): ExplorerEn
     }
     const subjectId = binding.s.value;
     const record = entityMap.get(subjectId) ?? {};
-    if (binding.p.value === RDF_TYPE_URI && binding.o.type === "uri" && isEntityTypeId(binding.o.value)) {
+    if (
+      binding.p.value === RDF_TYPE_URI &&
+      binding.o.type === "uri" &&
+      isEntityTypeId(binding.o.value, entityTypes)
+    ) {
       record.typeId = binding.o.value;
     }
     if (binding.p.value === RDFS_LABEL_URI && binding.o.type === "literal") {
@@ -582,7 +475,7 @@ function buildEntitiesFromConstruct(result: Record<string, unknown>): ExplorerEn
       id,
       label: record.label?.trim() || compactLabel(id),
       typeId: record.typeId,
-      typeLabel: ENTITY_TYPE_LABEL_BY_ID[record.typeId]
+      typeLabel: labelById[record.typeId] ?? compactLabel(record.typeId)
     });
   }
   return entities.sort((a, b) => a.label.localeCompare(b.label));
@@ -594,7 +487,10 @@ export function MetadataExplorerPage({
   onSelectedEntityIdChange
 }: MetadataExplorerPageProps) {
   const [query, setQuery] = useState<string>("");
-  const [queryText, setQueryText] = useState<string>(BUILTIN_EXAMPLE_QUERIES[0].query);
+  const [queryText, setQueryText] = useState<string>("");
+  const [builtinExamples, setBuiltinExamples] = useState<ExampleQuery[]>([]);
+  const [entityTypes, setEntityTypes] = useState<EntityTypeInfo[]>([]);
+  const [discoveryQuery, setDiscoveryQuery] = useState<string>("");
   const [queryRunning, setQueryRunning] = useState<boolean>(false);
   const [queryStatus, setQueryStatus] = useState<string>("");
   const [savedExamples, setSavedExamples] = useState<SavedSparqlExample[]>([]);
@@ -623,6 +519,31 @@ export function MetadataExplorerPage({
   const graphContainerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
   const activeLayoutRef = useRef<cytoscape.Layouts | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCatalog() {
+      try {
+        const [builtins, ontology] = await Promise.all([
+          fetchBuiltinSparqlExamples(),
+          fetchEntityTypes()
+        ]);
+        if (cancelled) return;
+        setBuiltinExamples(builtins);
+        setEntityTypes(ontology.types);
+        setDiscoveryQuery(ontology.discovery_query);
+        if (builtins.length > 0) {
+          setQueryText((current) => current || builtins[0].query);
+        }
+      } catch {
+        // Non-critical for initial paint; entity discovery will show its own error.
+      }
+    }
+    void loadCatalog();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -657,19 +578,24 @@ export function MetadataExplorerPage({
   }, [entities, entityTypeFilter, query]);
 
   const groupedFilteredEntities = useMemo(() => {
-    return ENTITY_TYPES.map((type) => ({
-      ...type,
-      entities: filteredEntities.filter((entity) => entity.typeId === type.id)
-    })).filter((group) => group.entities.length > 0);
-  }, [filteredEntities]);
+    return entityTypes
+      .map((type) => ({
+        ...type,
+        entities: filteredEntities.filter((entity) => entity.typeId === type.id)
+      }))
+      .filter((group) => group.entities.length > 0);
+  }, [filteredEntities, entityTypes]);
 
   useEffect(() => {
+    if (!discoveryQuery || entityTypes.length === 0) {
+      return;
+    }
     let cancelled = false;
     async function loadEntities() {
       setEntityStatus("");
       try {
-        const result = await constructSparql(ENTITY_DISCOVERY_QUERY);
-        const discoveredEntities = buildEntitiesFromConstruct(result);
+        const result = await constructSparql(discoveryQuery);
+        const discoveredEntities = buildEntitiesFromConstruct(result, entityTypes);
         if (cancelled) return;
         setEntities(discoveredEntities);
         if (!discoveredEntities.length) {
@@ -686,7 +612,7 @@ export function MetadataExplorerPage({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [discoveryQuery, entityTypes]);
 
   useEffect(() => {
     if (!entities.length) return;
@@ -982,7 +908,7 @@ export function MetadataExplorerPage({
             onChange={(event) => {
               const selectedLabel = event.target.value;
               const chosenSaved = savedExamples.find((q) => q.label === selectedLabel);
-              const chosenBuiltin = BUILTIN_EXAMPLE_QUERIES.find((q) => q.label === selectedLabel);
+              const chosenBuiltin = builtinExamples.find((q) => q.label === selectedLabel);
               const chosen = chosenSaved ?? chosenBuiltin;
               if (chosen) setQueryText(chosen.query);
               event.target.value = "";
@@ -1001,7 +927,7 @@ export function MetadataExplorerPage({
               </optgroup>
             ) : null}
             <optgroup label="Built-in">
-              {BUILTIN_EXAMPLE_QUERIES.map((q) => (
+              {builtinExamples.map((q) => (
                 <option key={`builtin:${q.label}`} value={q.label}>
                   {q.label}
                 </option>
@@ -1149,7 +1075,7 @@ export function MetadataExplorerPage({
             onChange={(event) => setEntityTypeFilter(event.target.value as EntityTypeFilter)}
           >
             <option value="all">All supported types</option>
-            {ENTITY_TYPES.map((type) => (
+            {entityTypes.map((type) => (
               <option key={type.id} value={type.id}>
                 {type.prefixed}
               </option>
@@ -1213,11 +1139,29 @@ export function MetadataExplorerPage({
                 <div className="detail-grid">
                   <section>
                     <h4>Inputs</h4>
-                    <TagList values={selectedTask.inputs} emptyLabel="No declared inputs" />
+                    <TagList
+                      values={
+                        (selectedTask.input_ports?.length ?? 0) > 0
+                          ? selectedTask.input_ports!.map((p) =>
+                              p.name === p.format ? p.format : `${p.name}: ${p.format}`
+                            )
+                          : selectedTask.inputs
+                      }
+                      emptyLabel="No declared inputs"
+                    />
                   </section>
                   <section>
                     <h4>Outputs</h4>
-                    <TagList values={selectedTask.outputs} emptyLabel="No declared outputs" />
+                    <TagList
+                      values={
+                        (selectedTask.output_ports?.length ?? 0) > 0
+                          ? selectedTask.output_ports!.map((p) =>
+                              p.name === p.format ? p.format : `${p.name}: ${p.format}`
+                            )
+                          : selectedTask.outputs
+                      }
+                      emptyLabel="No declared outputs"
+                    />
                   </section>
                   <section>
                     <h4>Implements Methods</h4>
@@ -1235,10 +1179,37 @@ export function MetadataExplorerPage({
                   </section>
                   <section>
                     <h4>Parameters</h4>
-                    <TagList
-                      values={selectedTask.has_parameter ?? []}
-                      emptyLabel="No parameters linked"
-                    />
+                    {selectedTask.config_spec?.parameters?.length ? (
+                      <div className="param-options-list">
+                        {selectedTask.config_spec.description ? (
+                          <p className="muted">{selectedTask.config_spec.description}</p>
+                        ) : null}
+                        {selectedTask.config_spec.parameters.map((param) => (
+                          <div key={param.name} className="param-option-row">
+                            <div className="param-option-header">
+                              <span className="param-option-name">
+                                {param.name}
+                                {param.required ? " *" : ""}
+                              </span>
+                              <span className="tag">{param.datatype}</span>
+                            </div>
+                            <div className="param-option-meta muted">
+                              {param.default_value !== undefined && param.default_value !== null
+                                ? `default: ${String(param.default_value)}`
+                                : null}
+                              {(param.allowed_values?.length ?? 0) > 0
+                                ? ` options: ${(param.allowed_values ?? []).map(String).join(", ")}`
+                                : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <TagList
+                        values={selectedTask.has_parameter ?? []}
+                        emptyLabel="No parameters linked"
+                      />
+                    )}
                   </section>
                 </div>
               </>
@@ -1246,7 +1217,7 @@ export function MetadataExplorerPage({
               <>
                 <h3>{selectedEntity.label}</h3>
                 <p>
-                  <strong>Type:</strong> {ENTITY_TYPES.find((t) => t.id === selectedEntity.typeId)?.prefixed}
+                  <strong>Type:</strong> {entityTypes.find((t) => t.id === selectedEntity.typeId)?.prefixed}
                 </p>
                 <p>
                   <strong>URI:</strong> {selectedEntity.id}

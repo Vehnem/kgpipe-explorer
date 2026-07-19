@@ -14,8 +14,8 @@ import {
   addEdge,
   type Connection
 } from "@xyflow/react";
-import type { ExamplePipeline, TaskSpec } from "../api";
-import { fetchExamplePipelines } from "../api";
+import type { ConfigSpec, DataElement, DataPortSpec, ExamplePipeline, ParameterSpec, TaskSpec } from "../api";
+import { fetchDataElements, fetchExamplePipelines } from "../api";
 import {
   buildCliCommand,
   buildPipelineConf,
@@ -25,10 +25,17 @@ import {
   toPipelineYaml
 } from "../pipelineExport";
 
+type ParameterValue = string | number | boolean;
+
 type PipelineNodeData = {
   label: string;
   inputs: string[];
   outputs: string[];
+  inputPorts: DataPortSpec[];
+  outputPorts: DataPortSpec[];
+  parameterValues?: Record<string, ParameterValue>;
+  configSpec?: ConfigSpec | null;
+  onConfigure?: () => void;
 };
 
 type DataNodeData = {
@@ -41,13 +48,6 @@ type PipelineNode = Node<PipelineNodeData>;
 type DataNode = Node<DataNodeData>;
 type AnyNode = PipelineNode | DataNode;
 
-const DATA_ELEMENTS: { label: string; format: string; dataKind: "source" | "sink" }[] = [
-  { label: "Text", format: "txt",  dataKind: "source" },
-  { label: "JSON", format: "json", dataKind: "source" },
-  { label: "RDF",  format: "rdf",  dataKind: "source" },
-  { label: "KG",   format: "ttl",  dataKind: "sink"   },
-];
-
 type PipelineBuilderPageProps = {
   tasks: TaskSpec[];
 };
@@ -55,14 +55,22 @@ type PipelineBuilderPageProps = {
 export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
   const [selectedTask, setSelectedTask] = useState<string>("");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [configuringNodeId, setConfiguringNodeId] = useState<string | null>(null);
   const [search, setSearch] = useState<string>("");
   const [connectionError, setConnectionError] = useState<string>("");
   const [nodes, setNodes, onNodesChange] = useNodesState<AnyNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   const [examples, setExamples] = useState<ExamplePipeline[]>([]);
+  const [dataElements, setDataElements] = useState<DataElement[]>([]);
   const [inspectedTask, setInspectedTask] = useState<TaskSpec | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+
+  const configureHandlerRef = React.useRef<(nodeId: string) => void>(() => {});
+  configureHandlerRef.current = (nodeId: string) => {
+    setSelectedNodeId(nodeId);
+    setConfiguringNodeId(nodeId);
+  };
 
   const taskNodeCount = useMemo(
     () => nodes.filter((node) => node.type === "taskNode").length,
@@ -85,7 +93,17 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
       .catch(() => {
         // Non-critical — silently ignore if examples are unavailable
       });
+    fetchDataElements()
+      .then(setDataElements)
+      .catch(() => {
+        // Non-critical — silently ignore if data elements are unavailable
+      });
   }, []);
+
+  const taskByName = useMemo(
+    () => Object.fromEntries(tasks.map((task) => [task.name, task])),
+    [tasks]
+  );
 
   function loadExample(exampleId: string) {
     const example = examples.find((e) => e.id === exampleId);
@@ -104,14 +122,23 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           }
         } as DataNode;
       }
+      const inputPorts = portsFromNode(n.input_ports, n.inputs);
+      const outputPorts = portsFromNode(n.output_ports, n.outputs);
+      const task = taskByName[n.task_name];
+      const nodeId = n.id;
       return {
-        id: n.id,
+        id: nodeId,
         position: { x: n.position_x, y: n.position_y },
         type: "taskNode",
         data: {
           label: n.task_name,
-          inputs: normalizeFormats(n.inputs),
-          outputs: normalizeFormats(n.outputs)
+          inputs: inputPorts.map((p) => p.format),
+          outputs: outputPorts.map((p) => p.format),
+          inputPorts,
+          outputPorts,
+          configSpec: task?.config_spec ?? null,
+          parameterValues: defaultParameterValues(task?.config_spec),
+          onConfigure: () => configureHandlerRef.current(nodeId)
         }
       } as PipelineNode;
     });
@@ -133,19 +160,19 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
     setNodes(newNodes);
     setEdges(newEdges);
     setSelectedNodeId(null);
+    setConfiguringNodeId(null);
     setConnectionError("");
   }
-
-  const taskByName = useMemo(
-    () => Object.fromEntries(tasks.map((task) => [task.name, task])),
-    [tasks]
-  );
 
   const filteredTasks = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return tasks;
     return tasks.filter((task) => {
-      const haystack = [task.name, task.inputs.join(" "), task.outputs.join(" ")]
+      const portHaystack = [
+        ...(task.input_ports ?? []).flatMap((p) => [p.name, p.format]),
+        ...(task.output_ports ?? []).flatMap((p) => [p.name, p.format])
+      ];
+      const haystack = [task.name, task.inputs.join(" "), task.outputs.join(" "), ...portHaystack]
         .join(" ")
         .toLowerCase();
       return haystack.includes(q);
@@ -160,6 +187,8 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
     if (!task) return;
     const id = `n-${crypto.randomUUID().slice(0, 8)}`;
     const offset = nodes.length * 40;
+    const inputPorts = portsFromTask(task, "input");
+    const outputPorts = portsFromTask(task, "output");
     setNodes((prev) => [
       ...prev,
       {
@@ -168,12 +197,41 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         type: "taskNode",
         data: {
           label: taskName,
-          inputs: normalizeFormats(task.inputs),
-          outputs: normalizeFormats(task.outputs)
+          inputs: inputPorts.map((p) => p.format),
+          outputs: outputPorts.map((p) => p.format),
+          inputPorts,
+          outputPorts,
+          configSpec: task.config_spec ?? null,
+          parameterValues: defaultParameterValues(task.config_spec),
+          onConfigure: () => configureHandlerRef.current(id)
         }
       }
     ]);
   }
+
+  function updateNodeParameter(nodeId: string, name: string, value: ParameterValue) {
+    setNodes((prev) =>
+      prev.map((node) => {
+        if (node.id !== nodeId || node.type !== "taskNode") return node;
+        const data = node.data as PipelineNodeData;
+        return {
+          ...node,
+          data: {
+            ...data,
+            parameterValues: {
+              ...(data.parameterValues ?? {}),
+              [name]: value
+            }
+          }
+        };
+      })
+    );
+  }
+
+  const configuringNode = useMemo(
+    () => nodes.find((node) => node.id === configuringNodeId) ?? null,
+    [nodes, configuringNodeId]
+  );
 
   function addDataNode(label: string, format: string, dataKind: "source" | "sink") {
     const id = `d-${crypto.randomUUID().slice(0, 8)}`;
@@ -207,8 +265,15 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
       return;
     }
 
-    const sourceFormat = parseHandleFormat(connection.sourceHandle, "out");
-    const targetFormat = parseHandleFormat(connection.targetHandle, "in");
+    const sourceNode = nodes.find((node) => node.id === connection.source);
+    const targetNode = nodes.find((node) => node.id === connection.target);
+    if (!sourceNode || !targetNode) {
+      setConnectionError("Invalid connection endpoints.");
+      return;
+    }
+
+    const sourceFormat = resolveHandleFormat(sourceNode, connection.sourceHandle, "out");
+    const targetFormat = resolveHandleFormat(targetNode, connection.targetHandle, "in");
     if (!sourceFormat || !targetFormat) {
       setConnectionError("Invalid handle selection.");
       return;
@@ -255,6 +320,9 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         (edge) => edge.source !== selectedNodeId && edge.target !== selectedNodeId
       )
     );
+    if (configuringNodeId === selectedNodeId) {
+      setConfiguringNodeId(null);
+    }
     setSelectedNodeId(null);
   }
 
@@ -292,7 +360,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           Add source or result data nodes to connect to pipeline ends.
         </p>
         <div className="data-element-buttons">
-          {DATA_ELEMENTS.map((el) => (
+          {dataElements.map((el) => (
             <button
               key={el.label}
               type="button"
@@ -301,9 +369,11 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
                 borderColor: formatColor(el.format),
                 color: formatColor(el.format)
               }}
-              onClick={() => addDataNode(el.label, el.format, el.dataKind)}
+              onClick={() =>
+                addDataNode(el.label, el.format, el.data_kind as "source" | "sink")
+              }
             >
-              {el.dataKind === "source" ? "▶" : "◆"} {el.label}
+              {el.data_kind === "source" ? "▶" : "◆"} {el.label}
             </button>
           ))}
         </div>
@@ -326,8 +396,8 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         </div>
         <div className="task-item-list">
           {visibleTasks.map((task) => {
-            const inputs = normalizeFormats(task.inputs);
-            const outputs = normalizeFormats(task.outputs);
+            const inputPorts = portsFromTask(task, "input");
+            const outputPorts = portsFromTask(task, "output");
             return (
               <div
                 key={task.name}
@@ -342,36 +412,38 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
                     {task.name}
                   </span>
                   <div className="task-list-item-io">
-                    {inputs.map((fmt) => (
+                    {inputPorts.map((port) => (
                       <span
-                        key={fmt}
+                        key={`in-${port.name}`}
                         className="fmt-badge"
+                        title={port.name !== port.format ? port.name : undefined}
                         style={{
-                          backgroundColor: `${formatColor(fmt)}1f`,
-                          borderColor: formatColor(fmt),
-                          color: formatColor(fmt)
+                          backgroundColor: `${formatColor(port.format)}1f`,
+                          borderColor: formatColor(port.format),
+                          color: formatColor(port.format)
                         }}
                       >
-                        {fmt}
+                        {port.format}
                       </span>
                     ))}
-                    {inputs.length > 0 && outputs.length > 0 && (
+                    {inputPorts.length > 0 && outputPorts.length > 0 && (
                       <span className="task-list-io-arrow">→</span>
                     )}
-                    {outputs.map((fmt) => (
+                    {outputPorts.map((port) => (
                       <span
-                        key={fmt}
+                        key={`out-${port.name}`}
                         className="fmt-badge"
+                        title={port.name !== port.format ? port.name : undefined}
                         style={{
-                          backgroundColor: `${formatColor(fmt)}1f`,
-                          borderColor: formatColor(fmt),
-                          color: formatColor(fmt)
+                          backgroundColor: `${formatColor(port.format)}1f`,
+                          borderColor: formatColor(port.format),
+                          color: formatColor(port.format)
                         }}
                       >
-                        {fmt}
+                        {port.format}
                       </span>
                     ))}
-                    {inputs.length === 0 && outputs.length === 0 && (
+                    {inputPorts.length === 0 && outputPorts.length === 0 && (
                       <span className="muted" style={{ fontSize: 10 }}>no IO declared</span>
                     )}
                   </div>
@@ -412,7 +484,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           <p className="builder-connect-error">{connectionError}</p>
         ) : (
           <p className="builder-connect-hint">
-            Connect from right output handles to left input handles.
+            Connect from right output handles to left input handles. Use ⚙ on a task to set parameters.
           </p>
         )}
         <h3>Loose Ends</h3>
@@ -440,7 +512,9 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={(_, node) => setSelectedNodeId(node.id)}
-          onPaneClick={() => setSelectedNodeId(null)}
+          onPaneClick={() => {
+            setSelectedNodeId(null);
+          }}
           nodeTypes={{ taskNode: TaskNode, dataNode: DataNode }}
           fitView
         >
@@ -457,6 +531,17 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           onAddToCanvas={() => addNode(inspectedTask.name)}
         />
       )}
+
+      {configuringNode?.type === "taskNode" &&
+        (configuringNode.data as PipelineNodeData).configSpec && (
+          <TaskConfigModal
+            taskName={(configuringNode.data as PipelineNodeData).label}
+            configSpec={(configuringNode.data as PipelineNodeData).configSpec!}
+            values={(configuringNode.data as PipelineNodeData).parameterValues ?? {}}
+            onChange={(name, value) => updateNodeParameter(configuringNode.id, name, value)}
+            onClose={() => setConfiguringNodeId(null)}
+          />
+        )}
 
       {exportOpen && (
         <PipelineExportModal
@@ -691,11 +776,11 @@ function TaskDetailModal({ task, onClose, onAddToCanvas }: TaskDetailModalProps)
           )}
           <div className="modal-section">
             <h4>Inputs</h4>
-            <TagPills values={task.inputs} empty="No declared inputs" />
+            <TagPills values={portLabels(portsFromTask(task, "input"))} empty="No declared inputs" />
           </div>
           <div className="modal-section">
             <h4>Outputs</h4>
-            <TagPills values={task.outputs} empty="No declared outputs" />
+            <TagPills values={portLabels(portsFromTask(task, "output"))} empty="No declared outputs" />
           </div>
           {(task.implements_method?.length ?? 0) > 0 && (
             <div className="modal-section">
@@ -709,12 +794,10 @@ function TaskDetailModal({ task, onClose, onAddToCanvas }: TaskDetailModalProps)
               <TagPills values={task.uses_tool ?? []} empty="" />
             </div>
           )}
-          {(task.has_parameter?.length ?? 0) > 0 && (
-            <div className="modal-section">
-              <h4>Parameters</h4>
-              <TagPills values={task.has_parameter ?? []} empty="" />
-            </div>
-          )}
+          <div className="modal-section">
+            <h4>Parameters</h4>
+            <ParameterOptionsList configSpec={task.config_spec} />
+          </div>
         </div>
 
         <div className="modal-footer">
@@ -736,6 +819,246 @@ function TaskDetailModal({ task, onClose, onAddToCanvas }: TaskDetailModalProps)
   );
 }
 
+function ParameterOptionsList({ configSpec }: { configSpec?: ConfigSpec | null }) {
+  const parameters = configSpec?.parameters ?? [];
+  if (!configSpec || parameters.length === 0) {
+    return <p className="muted">No parameters linked</p>;
+  }
+  return (
+    <div className="param-options-list">
+      {configSpec.description ? (
+        <p className="param-spec-description">{configSpec.description}</p>
+      ) : null}
+      {parameters.map((param) => (
+        <div key={param.name} className="param-option-row">
+          <div className="param-option-header">
+            <span className="param-option-name">
+              {param.name}
+              {param.required ? <span className="param-required">*</span> : null}
+            </span>
+            <span className="param-option-type">{param.datatype}</span>
+          </div>
+          <div className="param-option-meta">
+            {param.default_value !== undefined && param.default_value !== null && (
+              <span>default: {String(param.default_value)}</span>
+            )}
+            {param.minimum != null || param.maximum != null ? (
+              <span>
+                range: {param.minimum ?? "…"}–{param.maximum ?? "…"}
+                {param.unit ? ` ${param.unit}` : ""}
+              </span>
+            ) : null}
+          </div>
+          {(param.allowed_values?.length ?? 0) > 0 && (
+            <div className="param-option-values">
+              {(param.allowed_values ?? []).map((value) => (
+                <span key={String(value)} className="tag">
+                  {String(value)}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type TaskConfigModalProps = {
+  taskName: string;
+  configSpec: ConfigSpec;
+  values: Record<string, ParameterValue>;
+  onChange: (name: string, value: ParameterValue) => void;
+  onClose: () => void;
+};
+
+function TaskConfigModal({ taskName, configSpec, values, onChange, onClose }: TaskConfigModalProps) {
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  function handleBackdrop(e: React.MouseEvent) {
+    if (e.target === e.currentTarget) onClose();
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={handleBackdrop}>
+      <div
+        className="modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Configure ${taskName}`}
+      >
+        <div className="modal-header">
+          <h3>Configure · {taskName}</h3>
+          <button className="modal-close-btn" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
+        <div className="modal-body">
+          {configSpec.description ? (
+            <p className="param-spec-description">{configSpec.description}</p>
+          ) : null}
+          <div className="task-config-fields">
+            {configSpec.parameters.map((param) => (
+              <ParameterField
+                key={param.name}
+                param={param}
+                value={values[param.name]}
+                onChange={(next) => onChange(param.name, next)}
+              />
+            ))}
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button type="button" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function changedParameterEntries(
+  configSpec: ConfigSpec | null | undefined,
+  values: Record<string, ParameterValue> | undefined
+): Array<{ name: string; value: ParameterValue }> {
+  if (!configSpec || !values) return [];
+  const entries: Array<{ name: string; value: ParameterValue }> = [];
+  for (const param of configSpec.parameters) {
+    if (!(param.name in values)) continue;
+    const current = values[param.name];
+    const fallback = coerceDefault(param.default_value, param.datatype);
+    if (fallback === undefined || current !== fallback) {
+      entries.push({ name: param.name, value: current });
+    }
+  }
+  return entries;
+}
+
+function formatParameterValue(value: ParameterValue): string {
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return String(value);
+}
+
+type ParameterFieldProps = {
+  param: ParameterSpec;
+  value: ParameterValue | undefined;
+  onChange: (value: ParameterValue) => void;
+};
+
+function ParameterField({ param, value, onChange }: ParameterFieldProps) {
+  const current = value ?? coerceDefault(param.default_value, param.datatype);
+  const label = (
+    <span>
+      {param.name}
+      {param.required ? <span className="param-required">*</span> : null}
+      <span className="param-field-type">{param.datatype}</span>
+    </span>
+  );
+
+  if (param.datatype === "boolean") {
+    return (
+      <label className="param-field param-field-checkbox">
+        <input
+          type="checkbox"
+          checked={Boolean(current)}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        {label}
+      </label>
+    );
+  }
+
+  if ((param.allowed_values?.length ?? 0) > 0 || param.datatype === "enum") {
+    return (
+      <label className="param-field">
+        {label}
+        <select
+          value={String(current ?? "")}
+          onChange={(e) => onChange(coerceInputValue(e.target.value, param.datatype))}
+        >
+          {(param.allowed_values ?? []).map((option) => (
+            <option key={String(option)} value={String(option)}>
+              {String(option)}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
+  if (param.datatype === "integer" || param.datatype === "number") {
+    return (
+      <label className="param-field">
+        {label}
+        <input
+          type="number"
+          step={param.datatype === "integer" ? 1 : "any"}
+          min={param.minimum ?? undefined}
+          max={param.maximum ?? undefined}
+          value={current === undefined || current === null ? "" : String(current)}
+          onChange={(e) => onChange(coerceInputValue(e.target.value, param.datatype))}
+        />
+        {param.unit ? <span className="param-field-unit">{param.unit}</span> : null}
+      </label>
+    );
+  }
+
+  return (
+    <label className="param-field">
+      {label}
+      <input
+        type="text"
+        value={current === undefined || current === null ? "" : String(current)}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </label>
+  );
+}
+
+function defaultParameterValues(configSpec?: ConfigSpec | null): Record<string, ParameterValue> {
+  const values: Record<string, ParameterValue> = {};
+  for (const param of configSpec?.parameters ?? []) {
+    const coerced = coerceDefault(param.default_value, param.datatype);
+    if (coerced !== undefined) {
+      values[param.name] = coerced;
+    }
+  }
+  return values;
+}
+
+function coerceDefault(
+  value: string | number | boolean | null | undefined,
+  datatype: string
+): ParameterValue | undefined {
+  if (value === null || value === undefined) {
+    if (datatype === "boolean") return false;
+    return undefined;
+  }
+  return coerceInputValue(String(value), datatype);
+}
+
+function coerceInputValue(raw: string, datatype: string): ParameterValue {
+  if (datatype === "boolean") {
+    return raw === "true" || raw === "1";
+  }
+  if (datatype === "integer") {
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  if (datatype === "number") {
+    const parsed = Number.parseFloat(raw);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return raw;
+}
+
 function countRoots(nodes: Node[], edges: Edge[]): number {
   const incoming = new Map<string, number>();
   nodes.forEach((node) => incoming.set(node.id, 0));
@@ -750,20 +1073,82 @@ function countLeaves(nodes: Node[], edges: Edge[]): number {
   return [...outgoing.values()].filter((count) => count === 0).length;
 }
 
-function normalizeFormats(values: string[]): string[] {
-  const normalized = values
-    .map((value) => value.trim().toLowerCase())
-    .filter((value) => value.length > 0)
-    .map((value) => (value.startsWith(".") ? value.slice(1) : value));
-  return [...new Set(normalized)];
+function normalizeFormat(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return "";
+  return normalized.startsWith(".") ? normalized.slice(1) : normalized;
 }
 
-function parseHandleFormat(handleId: string, expectedKind: "in" | "out"): string | null {
-  const [kind, rawFormat] = handleId.split(":", 2);
+function synthesizePortsFromFormats(formats: string[]): DataPortSpec[] {
+  const used = new Map<string, number>();
+  const ports: DataPortSpec[] = [];
+  for (const raw of formats) {
+    const format = normalizeFormat(raw);
+    if (!format) continue;
+    const count = used.get(format) ?? 0;
+    used.set(format, count + 1);
+    // First port keeps format as name (compat with pedagogical out:txt / in:ttl handles);
+    // duplicates get a numeric suffix so React Flow handle IDs stay unique.
+    const name = count === 0 ? format : `${format}__${count + 1}`;
+    ports.push({ name, format });
+  }
+  return ports;
+}
+
+function portsFromNode(
+  ports: DataPortSpec[] | undefined,
+  formats: string[]
+): DataPortSpec[] {
+  if (ports && ports.length > 0) {
+    return ports.map((port) => ({
+      name: port.name.trim(),
+      format: normalizeFormat(port.format) || port.format
+    }));
+  }
+  return synthesizePortsFromFormats(formats);
+}
+
+function portsFromTask(task: TaskSpec, kind: "input" | "output"): DataPortSpec[] {
+  const ports = kind === "input" ? task.input_ports : task.output_ports;
+  const formats = kind === "input" ? task.inputs : task.outputs;
+  return portsFromNode(ports, formats);
+}
+
+function portLabels(ports: DataPortSpec[]): string[] {
+  return ports.map((port) =>
+    port.name === port.format ? port.format : `${port.name}: ${port.format}`
+  );
+}
+
+function parseHandleName(handleId: string, expectedKind: "in" | "out"): string | null {
+  const [kind, rawName] = handleId.split(":", 2);
   if (kind !== expectedKind) return null;
-  const format = rawFormat?.trim().toLowerCase();
-  if (!format) return null;
-  return format;
+  const name = rawName?.trim();
+  if (!name) return null;
+  return name;
+}
+
+function resolveHandleFormat(
+  node: AnyNode,
+  handleId: string,
+  expectedKind: "in" | "out"
+): string | null {
+  const portName = parseHandleName(handleId, expectedKind);
+  if (!portName) return null;
+
+  if (node.type === "dataNode") {
+    const data = node.data as DataNodeData;
+    if (expectedKind === "in" && portName === "any") return "any";
+    if (expectedKind === "out" && normalizeFormat(data.format) === normalizeFormat(portName)) {
+      return normalizeFormat(data.format);
+    }
+    return null;
+  }
+
+  const data = node.data as PipelineNodeData;
+  const ports = expectedKind === "in" ? data.inputPorts : data.outputPorts;
+  const port = ports.find((p) => p.name === portName);
+  return port ? port.format : null;
 }
 
 function formatColor(format: string): string {
@@ -790,22 +1175,47 @@ function formatColor(format: string): string {
 }
 
 function TaskNode({ data, selected }: NodeProps<PipelineNode>) {
-  const inputFormats = data.inputs.length > 0 ? data.inputs : ["any"];
-  const outputFormats = data.outputs.length > 0 ? data.outputs : ["any"];
+  const inputPorts =
+    data.inputPorts.length > 0
+      ? data.inputPorts
+      : synthesizePortsFromFormats(data.inputs.length > 0 ? data.inputs : ["any"]);
+  const outputPorts =
+    data.outputPorts.length > 0
+      ? data.outputPorts
+      : synthesizePortsFromFormats(data.outputs.length > 0 ? data.outputs : ["any"]);
+  const hasConfig = (data.configSpec?.parameters.length ?? 0) > 0;
+  const changedParams = changedParameterEntries(data.configSpec, data.parameterValues);
 
   return (
     <div className={`task-node ${selected ? "selected" : ""}`}>
-      <div className="task-node-title">{data.label}</div>
+      <div className="task-node-header">
+        <div className="task-node-title">{data.label}</div>
+        {hasConfig && (
+          <button
+            type="button"
+            className="task-node-settings-btn nodrag nopan"
+            title="Configure parameters"
+            aria-label={`Configure parameters for ${data.label}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              data.onConfigure?.();
+            }}
+          >
+            ⚙
+          </button>
+        )}
+      </div>
 
-      {inputFormats.map((fmt, idx) => (
+      {inputPorts.map((port, idx) => (
         <Handle
-          key={`in-${fmt}`}
+          key={`in-${port.name}`}
           type="target"
-          id={`in:${fmt}`}
+          id={`in:${port.name}`}
           position={Position.Left}
+          title={`${port.name} (${port.format})`}
           style={{
             top: 34 + idx * 16,
-            background: formatColor(fmt),
+            background: formatColor(port.format),
             border: "2px solid #fff",
             width: 10,
             height: 10
@@ -813,15 +1223,16 @@ function TaskNode({ data, selected }: NodeProps<PipelineNode>) {
         />
       ))}
 
-      {outputFormats.map((fmt, idx) => (
+      {outputPorts.map((port, idx) => (
         <Handle
-          key={`out-${fmt}`}
+          key={`out-${port.name}`}
           type="source"
-          id={`out:${fmt}`}
+          id={`out:${port.name}`}
           position={Position.Right}
+          title={`${port.name} (${port.format})`}
           style={{
             top: 34 + idx * 16,
-            background: formatColor(fmt),
+            background: formatColor(port.format),
             border: "2px solid #fff",
             width: 10,
             height: 10
@@ -831,12 +1242,23 @@ function TaskNode({ data, selected }: NodeProps<PipelineNode>) {
 
       <div className="task-node-io">
         <div>
-          <strong>in</strong>: {formatBadges(inputFormats)}
+          <strong>in</strong>: {formatBadges(inputPorts.map((p) => p.format))}
         </div>
         <div>
-          <strong>out</strong>: {formatBadges(outputFormats)}
+          <strong>out</strong>: {formatBadges(outputPorts.map((p) => p.format))}
         </div>
       </div>
+
+      {changedParams.length > 0 && (
+        <div className="task-node-params" title="Configured parameter values">
+          {changedParams.map((entry) => (
+            <div key={entry.name} className="task-node-param">
+              <span className="task-node-param-name">{entry.name}</span>
+              <span className="task-node-param-value">={formatParameterValue(entry.value)}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -875,9 +1297,9 @@ function DataNode({ data, selected }: NodeProps<DataNode>) {
 }
 
 function formatBadges(formats: string[]) {
-  return formats.map((fmt) => (
+  return formats.map((fmt, idx) => (
     <span
-      key={fmt}
+      key={`${fmt}-${idx}`}
       className="fmt-badge"
       style={{
         backgroundColor: `${formatColor(fmt)}1f`,
