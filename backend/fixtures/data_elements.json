@@ -1,0 +1,8 @@
+[
+  { "label": "Text", "format": "txt", "data_kind": "source" },
+  { "label": "JSON", "format": "json", "data_kind": "source" },
+  { "label": "RDF", "format": "nt", "data_kind": "source" },
+  { "label": "Seed KG", "format": "nt", "data_kind": "source" },
+  { "label": "KG", "format": "nt", "data_kind": "sink" },
+  { "label": "CSV", "format": "csv", "data_kind": "source" }
+]

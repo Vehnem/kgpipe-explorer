@@ -1,0 +1,28 @@
+{
+  "default_run_id": "kgi-bench-movie",
+  "runs": [
+    {
+      "id": "kgi-bench-movie",
+      "name": "KGI-Bench: Movies",
+      "description": "Movie-domain knowledge graph induction (15 pipelines)",
+      "tsv": "runs/kgi-bench-movie.tsv"
+    },
+    {
+      "id": "kgi-bench-books",
+      "name": "KGI-Bench: Books",
+      "description": "Book-domain benchmark — atomic pipelines only (9 pipelines)",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "atomic_only",
+      "perturb": true
+    },
+    {
+      "id": "kgi-bench-people",
+      "name": "KGI-Bench: People",
+      "description": "Person entity linking — R-pipeline focus (6 pipelines)",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": ["R_A", "R_B", "R_C", "J_A", "J_B", "RJT"],
+      "perturb": true
+    }
+  ]
+}

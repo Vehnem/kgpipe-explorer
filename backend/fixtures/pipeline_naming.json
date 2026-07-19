@@ -1,0 +1,13 @@
+{
+  "resource_prefix": "http://github.com/ScaDS/kgpipe/resource/",
+  "task_family_names": {
+    "J": "JSON",
+    "R": "RDF",
+    "T": "Text"
+  },
+  "variant_descriptions": {
+    "A": "baseline variant",
+    "B": "alternative variant",
+    "C": "llm-based variant"
+  }
+}

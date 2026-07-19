@@ -1,0 +1,40 @@
+{
+  "types": [
+    {
+      "id": "http://github.com/ScaDS/kgpipe/ontology/Task",
+      "label": "Tasks",
+      "prefixed": "kgo:Task"
+    },
+    {
+      "id": "http://github.com/ScaDS/kgpipe/ontology/TaskRun",
+      "label": "Task Runs",
+      "prefixed": "kgo:TaskRun"
+    },
+    {
+      "id": "http://github.com/ScaDS/kgpipe/ontology/Implementation",
+      "label": "Implementations",
+      "prefixed": "kgo:Implementation"
+    },
+    {
+      "id": "http://github.com/ScaDS/kgpipe/ConfigSpec",
+      "label": "Config Specs",
+      "prefixed": "kgo:ConfigSpec"
+    },
+    {
+      "id": "http://github.com/ScaDS/kgpipe/Parameter",
+      "label": "Parameters",
+      "prefixed": "kgo:Parameter"
+    },
+    {
+      "id": "http://github.com/ScaDS/kgpipe/ontology/Metric",
+      "label": "Metrics",
+      "prefixed": "kgo:Metric"
+    },
+    {
+      "id": "http://github.com/ScaDS/kgpipe/ontology/MetricRun",
+      "label": "Metric Runs",
+      "prefixed": "kgo:MetricRun"
+    }
+  ],
+  "discovery_query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/>\nPREFIX kgoo: <http://github.com/ScaDS/kgpipe/ontology/>\nPREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nCONSTRUCT {\n  ?entity a ?type .\n  ?entity rdfs:label ?label .\n}\nWHERE {\n  VALUES ?type {\n    kgoo:Task\n    kgoo:TaskRun\n    kgoo:Implementation\n    kgo:ConfigSpec\n    kgo:Parameter\n    kgoo:Metric\n    kgoo:MetricRun\n  }\n  ?entity a ?type .\n  OPTIONAL { ?entity rdfs:label ?label . }\n}"
+}

@@ -1,0 +1,14 @@
+{
+  "groups": [
+    { "id": "coverage", "label": "Coverage", "aggregator": "mean", "weight": 1 },
+    { "id": "accuracy", "label": "Accuracy", "aggregator": "mean", "weight": 1 },
+    { "id": "consistency", "label": "Consistency", "aggregator": "mean", "weight": 1 }
+  ],
+  "metric_group_rules": [
+    { "match": "exact", "value": "ACC_T", "group_id": "accuracy" },
+    { "match": "prefix", "value": "COV_", "group_id": "coverage" },
+    { "match": "exact", "value": "1-DR", "group_id": "consistency" },
+    { "match": "prefix", "value": "O_", "group_id": "consistency" }
+  ],
+  "fallback_group_id": "none"
+}

@@ -1,0 +1,2857 @@
+[
+  {
+    "id": "example_ner_to_kg",
+    "name": "NER \u2192 KG Linker",
+    "description": "Text source fed into a named-entity recogniser, whose Turtle output is consumed by a KG linker. The final linked graph is collected by a KG sink.",
+    "nodes": [
+      {
+        "id": "n-text-src",
+        "task_name": "Text",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20,
+        "position_y": 140,
+        "node_type": "dataNode",
+        "format": "txt",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-ner",
+        "task_name": "NERExtractor",
+        "inputs": [
+          "txt"
+        ],
+        "outputs": [
+          "ttl"
+        ],
+        "position_x": 220,
+        "position_y": 140
+      },
+      {
+        "id": "n-linker",
+        "task_name": "KGLinker",
+        "inputs": [
+          "ttl"
+        ],
+        "outputs": [
+          "ttl",
+          "json"
+        ],
+        "position_x": 480,
+        "position_y": 140
+      },
+      {
+        "id": "n-kg-sink",
+        "task_name": "KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 740,
+        "position_y": 140,
+        "node_type": "dataNode",
+        "format": "ttl",
+        "data_kind": "sink"
+      }
+    ],
+    "edges": [
+      {
+        "source": "n-text-src",
+        "target": "n-ner",
+        "source_handle": "out:txt",
+        "target_handle": "in:txt",
+        "format_label": "txt"
+      },
+      {
+        "source": "n-ner",
+        "target": "n-linker",
+        "source_handle": "out:ttl",
+        "target_handle": "in:ttl",
+        "format_label": "ttl"
+      },
+      {
+        "source": "n-linker",
+        "target": "n-kg-sink",
+        "source_handle": "out:ttl",
+        "target_handle": "in:any",
+        "format_label": "ttl"
+      }
+    ]
+  },
+  {
+    "id": "example_pdf_to_kg",
+    "name": "PDF \u2192 KG",
+    "description": "A PDF document is converted to Markdown, then processed in parallel by a content extractor and a metadata extractor. Both extraction branches produce Turtle triples that are collected into a knowledge graph.",
+    "nodes": [
+      {
+        "id": "n-pdf-src",
+        "task_name": "PDF",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20,
+        "position_y": 200,
+        "node_type": "dataNode",
+        "format": "pdf",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-pdf2md",
+        "task_name": "PDFtoMarkdown",
+        "inputs": [
+          "pdf"
+        ],
+        "outputs": [
+          "md"
+        ],
+        "position_x": 220,
+        "position_y": 200
+      },
+      {
+        "id": "n-content-ext",
+        "task_name": "ContentExtractor",
+        "inputs": [
+          "md"
+        ],
+        "outputs": [
+          "ttl"
+        ],
+        "position_x": 480,
+        "position_y": 100
+      },
+      {
+        "id": "n-meta-ext",
+        "task_name": "MetadataExtractor",
+        "inputs": [
+          "md"
+        ],
+        "outputs": [
+          "ttl"
+        ],
+        "position_x": 480,
+        "position_y": 300
+      },
+      {
+        "id": "n-kg-sink",
+        "task_name": "KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 740,
+        "position_y": 200,
+        "node_type": "dataNode",
+        "format": "ttl",
+        "data_kind": "sink"
+      }
+    ],
+    "edges": [
+      {
+        "source": "n-pdf-src",
+        "target": "n-pdf2md",
+        "source_handle": "out:pdf",
+        "target_handle": "in:pdf",
+        "format_label": "pdf"
+      },
+      {
+        "source": "n-pdf2md",
+        "target": "n-content-ext",
+        "source_handle": "out:md",
+        "target_handle": "in:md",
+        "format_label": "md"
+      },
+      {
+        "source": "n-pdf2md",
+        "target": "n-meta-ext",
+        "source_handle": "out:md",
+        "target_handle": "in:md",
+        "format_label": "md"
+      },
+      {
+        "source": "n-content-ext",
+        "target": "n-kg-sink",
+        "source_handle": "out:ttl",
+        "target_handle": "in:any",
+        "format_label": "ttl"
+      },
+      {
+        "source": "n-meta-ext",
+        "target": "n-kg-sink",
+        "source_handle": "out:ttl",
+        "target_handle": "in:any",
+        "format_label": "ttl"
+      }
+    ]
+  },
+  {
+    "id": "rdf_base",
+    "name": "RDF Base",
+    "description": "Align source RDF with target KG",
+    "nodes": [
+      {
+        "id": "n-source",
+        "task_name": "RDF",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 80.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-seed",
+        "task_name": "Seed KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 220.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-paris-entity-matching-0",
+        "task_name": "paris_entity_matching",
+        "inputs": [
+          "nt",
+          "nt"
+        ],
+        "outputs": [
+          "paris.csv"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          },
+          {
+            "name": "kg",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "paris.csv"
+          }
+        ],
+        "position_x": 240.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-paris-exchange-1",
+        "task_name": "paris_exchange",
+        "inputs": [
+          "paris.csv"
+        ],
+        "outputs": [
+          "er.json"
+        ],
+        "input_ports": [
+          {
+            "name": "input",
+            "format": "paris.csv"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "er.json"
+          }
+        ],
+        "position_x": 460.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-fusion-first-value-2",
+        "task_name": "fusion_first_value",
+        "inputs": [
+          "nt",
+          "nt",
+          "er.json"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          },
+          {
+            "name": "kg",
+            "format": "nt"
+          },
+          {
+            "name": "matches1",
+            "format": "er.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 680.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-type-inference-ontology-simple-3",
+        "task_name": "type_inference_ontology_simple",
+        "inputs": [
+          "nt"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "result",
+            "format": "nt"
+          }
+        ],
+        "position_x": 900.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-kg-sink",
+        "task_name": "KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 1120.0,
+        "position_y": 140.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "sink"
+      }
+    ],
+    "edges": [
+      {
+        "source": "n-source",
+        "target": "n-paris-entity-matching-0",
+        "source_handle": "out:nt",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-paris-entity-matching-0",
+        "source_handle": "out:nt",
+        "target_handle": "in:kg",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-paris-entity-matching-0",
+        "target": "n-paris-exchange-1",
+        "source_handle": "out:output",
+        "target_handle": "in:input",
+        "format_label": "paris.csv"
+      },
+      {
+        "source": "n-source",
+        "target": "n-fusion-first-value-2",
+        "source_handle": "out:nt",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-fusion-first-value-2",
+        "source_handle": "out:nt",
+        "target_handle": "in:kg",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-paris-exchange-1",
+        "target": "n-fusion-first-value-2",
+        "source_handle": "out:output",
+        "target_handle": "in:matches1",
+        "format_label": "er.json"
+      },
+      {
+        "source": "n-fusion-first-value-2",
+        "target": "n-type-inference-ontology-simple-3",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-type-inference-ontology-simple-3",
+        "target": "n-kg-sink",
+        "source_handle": "out:result",
+        "target_handle": "in:any",
+        "format_label": "nt"
+      }
+    ]
+  },
+  {
+    "id": "rdf_alt",
+    "name": "RDF Alt",
+    "description": "Align source RDF with target KG with a tabular matching approach",
+    "nodes": [
+      {
+        "id": "n-source",
+        "task_name": "RDF",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 80.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-seed",
+        "task_name": "Seed KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 220.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-transform2-rdf-to-csv-v2-0",
+        "task_name": "transform2_rdf_to_csv_v2",
+        "inputs": [
+          "nt",
+          "nt"
+        ],
+        "outputs": [
+          "csv",
+          "csv"
+        ],
+        "input_ports": [
+          {
+            "name": "rdf1",
+            "format": "nt"
+          },
+          {
+            "name": "rdf2",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "csv1",
+            "format": "csv"
+          },
+          {
+            "name": "csv2",
+            "format": "csv"
+          }
+        ],
+        "position_x": 240.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-pyjedai-entity-matching-v2-1",
+        "task_name": "pyjedai_entity_matching_v2",
+        "inputs": [
+          "csv",
+          "csv"
+        ],
+        "outputs": [
+          "er.json"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "csv"
+          },
+          {
+            "name": "target",
+            "format": "csv"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "er.json"
+          }
+        ],
+        "position_x": 460.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-reduce-to-best-match-per-entity-2",
+        "task_name": "reduce_to_best_match_per_entity",
+        "inputs": [
+          "er.json"
+        ],
+        "outputs": [
+          "er.json"
+        ],
+        "input_ports": [
+          {
+            "name": "json1",
+            "format": "er.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "er.json"
+          }
+        ],
+        "position_x": 680.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-valentine-csv-matching-v2-3",
+        "task_name": "valentine_csv_matching_v2",
+        "inputs": [
+          "csv",
+          "csv"
+        ],
+        "outputs": [
+          "er.json"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "csv"
+          },
+          {
+            "name": "target",
+            "format": "csv"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "er.json"
+          }
+        ],
+        "position_x": 900.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-aggregate-2matches-4",
+        "task_name": "aggregate_2matches",
+        "inputs": [
+          "er.json",
+          "er.json"
+        ],
+        "outputs": [
+          "er.json"
+        ],
+        "input_ports": [
+          {
+            "name": "json1",
+            "format": "er.json"
+          },
+          {
+            "name": "json2",
+            "format": "er.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "er.json"
+          }
+        ],
+        "position_x": 1120.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-fusion-first-value-5",
+        "task_name": "fusion_first_value",
+        "inputs": [
+          "nt",
+          "nt",
+          "er.json"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          },
+          {
+            "name": "kg",
+            "format": "nt"
+          },
+          {
+            "name": "matches1",
+            "format": "er.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 1340.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-type-inference-ontology-simple-6",
+        "task_name": "type_inference_ontology_simple",
+        "inputs": [
+          "nt"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "result",
+            "format": "nt"
+          }
+        ],
+        "position_x": 1560.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-kg-sink",
+        "task_name": "KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 1780.0,
+        "position_y": 140.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "sink"
+      }
+    ],
+    "edges": [
+      {
+        "source": "n-source",
+        "target": "n-transform2-rdf-to-csv-v2-0",
+        "source_handle": "out:nt",
+        "target_handle": "in:rdf1",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-transform2-rdf-to-csv-v2-0",
+        "source_handle": "out:nt",
+        "target_handle": "in:rdf2",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-transform2-rdf-to-csv-v2-0",
+        "target": "n-pyjedai-entity-matching-v2-1",
+        "source_handle": "out:csv1",
+        "target_handle": "in:source",
+        "format_label": "csv"
+      },
+      {
+        "source": "n-transform2-rdf-to-csv-v2-0",
+        "target": "n-pyjedai-entity-matching-v2-1",
+        "source_handle": "out:csv2",
+        "target_handle": "in:target",
+        "format_label": "csv"
+      },
+      {
+        "source": "n-pyjedai-entity-matching-v2-1",
+        "target": "n-reduce-to-best-match-per-entity-2",
+        "source_handle": "out:output",
+        "target_handle": "in:json1",
+        "format_label": "er.json"
+      },
+      {
+        "source": "n-transform2-rdf-to-csv-v2-0",
+        "target": "n-valentine-csv-matching-v2-3",
+        "source_handle": "out:csv1",
+        "target_handle": "in:source",
+        "format_label": "csv"
+      },
+      {
+        "source": "n-transform2-rdf-to-csv-v2-0",
+        "target": "n-valentine-csv-matching-v2-3",
+        "source_handle": "out:csv1",
+        "target_handle": "in:target",
+        "format_label": "csv"
+      },
+      {
+        "source": "n-valentine-csv-matching-v2-3",
+        "target": "n-aggregate-2matches-4",
+        "source_handle": "out:output",
+        "target_handle": "in:json1",
+        "format_label": "er.json"
+      },
+      {
+        "source": "n-valentine-csv-matching-v2-3",
+        "target": "n-aggregate-2matches-4",
+        "source_handle": "out:output",
+        "target_handle": "in:json2",
+        "format_label": "er.json"
+      },
+      {
+        "source": "n-source",
+        "target": "n-fusion-first-value-5",
+        "source_handle": "out:nt",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-fusion-first-value-5",
+        "source_handle": "out:nt",
+        "target_handle": "in:kg",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-aggregate-2matches-4",
+        "target": "n-fusion-first-value-5",
+        "source_handle": "out:output",
+        "target_handle": "in:matches1",
+        "format_label": "er.json"
+      },
+      {
+        "source": "n-fusion-first-value-5",
+        "target": "n-type-inference-ontology-simple-6",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-type-inference-ontology-simple-6",
+        "target": "n-kg-sink",
+        "source_handle": "out:result",
+        "target_handle": "in:any",
+        "format_label": "nt"
+      }
+    ]
+  },
+  {
+    "id": "rdf_llm",
+    "name": "RDF LLM",
+    "description": "Align relations of source RDF with target KG using LLM",
+    "nodes": [
+      {
+        "id": "n-source",
+        "task_name": "RDF",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 80.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-seed",
+        "task_name": "Seed KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 220.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-llm-task-rdf-ontology-matching-v1-0",
+        "task_name": "llm_task_rdf_ontology_matching_v1",
+        "inputs": [
+          "nt",
+          "nt"
+        ],
+        "outputs": [
+          "er.json"
+        ],
+        "input_ports": [
+          {
+            "name": "input",
+            "format": "nt"
+          },
+          {
+            "name": "kg",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "er.json"
+          }
+        ],
+        "position_x": 240.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-map-er-match-relations-1",
+        "task_name": "map_er_match_relations",
+        "inputs": [
+          "er.json",
+          "nt"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "matches",
+            "format": "er.json"
+          },
+          {
+            "name": "input",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 460.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-paris-entity-matching-2",
+        "task_name": "paris_entity_matching",
+        "inputs": [
+          "nt",
+          "nt"
+        ],
+        "outputs": [
+          "paris.csv"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          },
+          {
+            "name": "kg",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "paris.csv"
+          }
+        ],
+        "position_x": 680.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-paris-exchange-3",
+        "task_name": "paris_exchange",
+        "inputs": [
+          "paris.csv"
+        ],
+        "outputs": [
+          "er.json"
+        ],
+        "input_ports": [
+          {
+            "name": "input",
+            "format": "paris.csv"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "er.json"
+          }
+        ],
+        "position_x": 900.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-aggregate-2matches-4",
+        "task_name": "aggregate_2matches",
+        "inputs": [
+          "er.json",
+          "er.json"
+        ],
+        "outputs": [
+          "er.json"
+        ],
+        "input_ports": [
+          {
+            "name": "json1",
+            "format": "er.json"
+          },
+          {
+            "name": "json2",
+            "format": "er.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "er.json"
+          }
+        ],
+        "position_x": 1120.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-fusion-first-value-5",
+        "task_name": "fusion_first_value",
+        "inputs": [
+          "nt",
+          "nt",
+          "er.json"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          },
+          {
+            "name": "kg",
+            "format": "nt"
+          },
+          {
+            "name": "matches1",
+            "format": "er.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 1340.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-type-inference-ontology-simple-6",
+        "task_name": "type_inference_ontology_simple",
+        "inputs": [
+          "nt"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "result",
+            "format": "nt"
+          }
+        ],
+        "position_x": 1560.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-kg-sink",
+        "task_name": "KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 1780.0,
+        "position_y": 140.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "sink"
+      }
+    ],
+    "edges": [
+      {
+        "source": "n-source",
+        "target": "n-llm-task-rdf-ontology-matching-v1-0",
+        "source_handle": "out:nt",
+        "target_handle": "in:input",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-llm-task-rdf-ontology-matching-v1-0",
+        "source_handle": "out:nt",
+        "target_handle": "in:kg",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-llm-task-rdf-ontology-matching-v1-0",
+        "target": "n-map-er-match-relations-1",
+        "source_handle": "out:output",
+        "target_handle": "in:matches",
+        "format_label": "er.json"
+      },
+      {
+        "source": "n-source",
+        "target": "n-map-er-match-relations-1",
+        "source_handle": "out:nt",
+        "target_handle": "in:input",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-map-er-match-relations-1",
+        "target": "n-paris-entity-matching-2",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-paris-entity-matching-2",
+        "source_handle": "out:nt",
+        "target_handle": "in:kg",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-paris-entity-matching-2",
+        "target": "n-paris-exchange-3",
+        "source_handle": "out:output",
+        "target_handle": "in:input",
+        "format_label": "paris.csv"
+      },
+      {
+        "source": "n-paris-exchange-3",
+        "target": "n-aggregate-2matches-4",
+        "source_handle": "out:output",
+        "target_handle": "in:json1",
+        "format_label": "er.json"
+      },
+      {
+        "source": "n-paris-exchange-3",
+        "target": "n-aggregate-2matches-4",
+        "source_handle": "out:output",
+        "target_handle": "in:json2",
+        "format_label": "er.json"
+      },
+      {
+        "source": "n-source",
+        "target": "n-fusion-first-value-5",
+        "source_handle": "out:nt",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-fusion-first-value-5",
+        "source_handle": "out:nt",
+        "target_handle": "in:kg",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-aggregate-2matches-4",
+        "target": "n-fusion-first-value-5",
+        "source_handle": "out:output",
+        "target_handle": "in:matches1",
+        "format_label": "er.json"
+      },
+      {
+        "source": "n-fusion-first-value-5",
+        "target": "n-type-inference-ontology-simple-6",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-type-inference-ontology-simple-6",
+        "target": "n-kg-sink",
+        "source_handle": "out:result",
+        "target_handle": "in:any",
+        "format_label": "nt"
+      }
+    ]
+  },
+  {
+    "id": "json_base",
+    "name": "Json Base",
+    "description": "Construct intermediate RDF from JSON",
+    "nodes": [
+      {
+        "id": "n-source",
+        "task_name": "JSON",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 80.0,
+        "node_type": "dataNode",
+        "format": "json",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-seed",
+        "task_name": "Seed KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 220.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-construct-rdf-from-json3-0",
+        "task_name": "construct_rdf_from_json3",
+        "inputs": [
+          "json"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 240.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-paris-entity-matching-1",
+        "task_name": "paris_entity_matching",
+        "inputs": [
+          "nt",
+          "nt"
+        ],
+        "outputs": [
+          "paris.csv"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          },
+          {
+            "name": "kg",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "paris.csv"
+          }
+        ],
+        "position_x": 460.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-paris-exchange-2",
+        "task_name": "paris_exchange",
+        "inputs": [
+          "paris.csv"
+        ],
+        "outputs": [
+          "er.json"
+        ],
+        "input_ports": [
+          {
+            "name": "input",
+            "format": "paris.csv"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "er.json"
+          }
+        ],
+        "position_x": 680.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-fusion-first-value-3",
+        "task_name": "fusion_first_value",
+        "inputs": [
+          "nt",
+          "nt",
+          "er.json"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          },
+          {
+            "name": "kg",
+            "format": "nt"
+          },
+          {
+            "name": "matches1",
+            "format": "er.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 900.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-type-inference-ontology-simple-4",
+        "task_name": "type_inference_ontology_simple",
+        "inputs": [
+          "nt"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "result",
+            "format": "nt"
+          }
+        ],
+        "position_x": 1120.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-kg-sink",
+        "task_name": "KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 1340.0,
+        "position_y": 140.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "sink"
+      }
+    ],
+    "edges": [
+      {
+        "source": "n-source",
+        "target": "n-construct-rdf-from-json3-0",
+        "source_handle": "out:json",
+        "target_handle": "in:source",
+        "format_label": "json"
+      },
+      {
+        "source": "n-construct-rdf-from-json3-0",
+        "target": "n-paris-entity-matching-1",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-paris-entity-matching-1",
+        "source_handle": "out:nt",
+        "target_handle": "in:kg",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-paris-entity-matching-1",
+        "target": "n-paris-exchange-2",
+        "source_handle": "out:output",
+        "target_handle": "in:input",
+        "format_label": "paris.csv"
+      },
+      {
+        "source": "n-construct-rdf-from-json3-0",
+        "target": "n-fusion-first-value-3",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-fusion-first-value-3",
+        "source_handle": "out:nt",
+        "target_handle": "in:kg",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-paris-exchange-2",
+        "target": "n-fusion-first-value-3",
+        "source_handle": "out:output",
+        "target_handle": "in:matches1",
+        "format_label": "er.json"
+      },
+      {
+        "source": "n-fusion-first-value-3",
+        "target": "n-type-inference-ontology-simple-4",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-type-inference-ontology-simple-4",
+        "target": "n-kg-sink",
+        "source_handle": "out:result",
+        "target_handle": "in:any",
+        "format_label": "nt"
+      }
+    ]
+  },
+  {
+    "id": "json_alt",
+    "name": "Json Alt",
+    "description": "Link JSON objects to target KG",
+    "nodes": [
+      {
+        "id": "n-source",
+        "task_name": "JSON",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 80.0,
+        "node_type": "dataNode",
+        "format": "json",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-seed",
+        "task_name": "Seed KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 220.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-construct-linkedrdf-from-json-v3-0",
+        "task_name": "construct_linkedrdf_from_json_v3",
+        "inputs": [
+          "json",
+          "nt"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "json"
+          },
+          {
+            "name": "target",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 240.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-select-first-value-1",
+        "task_name": "select_first_value",
+        "inputs": [
+          "nt",
+          "nt"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          },
+          {
+            "name": "target",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 460.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-type-inference-ontology-simple-2",
+        "task_name": "type_inference_ontology_simple",
+        "inputs": [
+          "nt"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "result",
+            "format": "nt"
+          }
+        ],
+        "position_x": 680.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-kg-sink",
+        "task_name": "KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 900.0,
+        "position_y": 140.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "sink"
+      }
+    ],
+    "edges": [
+      {
+        "source": "n-source",
+        "target": "n-construct-linkedrdf-from-json-v3-0",
+        "source_handle": "out:json",
+        "target_handle": "in:source",
+        "format_label": "json"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-construct-linkedrdf-from-json-v3-0",
+        "source_handle": "out:nt",
+        "target_handle": "in:target",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-construct-linkedrdf-from-json-v3-0",
+        "target": "n-select-first-value-1",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-select-first-value-1",
+        "source_handle": "out:nt",
+        "target_handle": "in:target",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-select-first-value-1",
+        "target": "n-type-inference-ontology-simple-2",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-type-inference-ontology-simple-2",
+        "target": "n-kg-sink",
+        "source_handle": "out:result",
+        "target_handle": "in:any",
+        "format_label": "nt"
+      }
+    ]
+  },
+  {
+    "id": "json_llm",
+    "name": "Json LLM",
+    "description": "Align JSON path to target KG (ontology + sample KG)",
+    "nodes": [
+      {
+        "id": "n-source",
+        "task_name": "JSON",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 80.0,
+        "node_type": "dataNode",
+        "format": "json",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-seed",
+        "task_name": "Seed KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 220.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-llm-task-map-and-construct-0",
+        "task_name": "llm_task_map_and_construct",
+        "inputs": [
+          "json"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "input",
+            "format": "json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 240.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-aggregate-rdf-files-1",
+        "task_name": "aggregate_rdf_files",
+        "inputs": [
+          "nt"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "input",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 460.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-paris-entity-matching-2",
+        "task_name": "paris_entity_matching",
+        "inputs": [
+          "nt",
+          "nt"
+        ],
+        "outputs": [
+          "paris.csv"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          },
+          {
+            "name": "kg",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "paris.csv"
+          }
+        ],
+        "position_x": 680.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-paris-exchange-3",
+        "task_name": "paris_exchange",
+        "inputs": [
+          "paris.csv"
+        ],
+        "outputs": [
+          "er.json"
+        ],
+        "input_ports": [
+          {
+            "name": "input",
+            "format": "paris.csv"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "er.json"
+          }
+        ],
+        "position_x": 900.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-fusion-first-value-4",
+        "task_name": "fusion_first_value",
+        "inputs": [
+          "nt",
+          "nt",
+          "er.json"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          },
+          {
+            "name": "kg",
+            "format": "nt"
+          },
+          {
+            "name": "matches1",
+            "format": "er.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 1120.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-type-inference-ontology-simple-5",
+        "task_name": "type_inference_ontology_simple",
+        "inputs": [
+          "nt"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "result",
+            "format": "nt"
+          }
+        ],
+        "position_x": 1340.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-kg-sink",
+        "task_name": "KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 1560.0,
+        "position_y": 140.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "sink"
+      }
+    ],
+    "edges": [
+      {
+        "source": "n-source",
+        "target": "n-llm-task-map-and-construct-0",
+        "source_handle": "out:json",
+        "target_handle": "in:input",
+        "format_label": "json"
+      },
+      {
+        "source": "n-llm-task-map-and-construct-0",
+        "target": "n-aggregate-rdf-files-1",
+        "source_handle": "out:output",
+        "target_handle": "in:input",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-aggregate-rdf-files-1",
+        "target": "n-paris-entity-matching-2",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-paris-entity-matching-2",
+        "source_handle": "out:nt",
+        "target_handle": "in:kg",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-paris-entity-matching-2",
+        "target": "n-paris-exchange-3",
+        "source_handle": "out:output",
+        "target_handle": "in:input",
+        "format_label": "paris.csv"
+      },
+      {
+        "source": "n-llm-task-map-and-construct-0",
+        "target": "n-fusion-first-value-4",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-fusion-first-value-4",
+        "source_handle": "out:nt",
+        "target_handle": "in:kg",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-paris-exchange-3",
+        "target": "n-fusion-first-value-4",
+        "source_handle": "out:output",
+        "target_handle": "in:matches1",
+        "format_label": "er.json"
+      },
+      {
+        "source": "n-fusion-first-value-4",
+        "target": "n-type-inference-ontology-simple-5",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-type-inference-ontology-simple-5",
+        "target": "n-kg-sink",
+        "source_handle": "out:result",
+        "target_handle": "in:any",
+        "format_label": "nt"
+      }
+    ]
+  },
+  {
+    "id": "text_base",
+    "name": "Text Base",
+    "description": "Use spoltight build RDF stagging Graph and apply Paris matching",
+    "nodes": [
+      {
+        "id": "n-source",
+        "task_name": "Text",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 80.0,
+        "node_type": "dataNode",
+        "format": "txt",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-seed",
+        "task_name": "Seed KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 220.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-corenlp-openie-extraction-0",
+        "task_name": "corenlp_openie_extraction",
+        "inputs": [
+          "txt"
+        ],
+        "outputs": [
+          "openie.json"
+        ],
+        "input_ports": [
+          {
+            "name": "input",
+            "format": "txt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "openie.json"
+          }
+        ],
+        "position_x": 240.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-corenlp-exchange-1",
+        "task_name": "corenlp_exchange",
+        "inputs": [
+          "openie.json"
+        ],
+        "outputs": [
+          "te.json"
+        ],
+        "input_ports": [
+          {
+            "name": "input",
+            "format": "openie.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "te.json"
+          }
+        ],
+        "position_x": 460.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-label-alias-embedding-rl-2",
+        "task_name": "label_alias_embedding_rl",
+        "inputs": [
+          "te.json"
+        ],
+        "outputs": [
+          "te.json"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "te.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "te.json"
+          }
+        ],
+        "position_x": 680.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-dbpedia-spotlight-ner-nel-3",
+        "task_name": "dbpedia_spotlight_ner_nel",
+        "inputs": [
+          "txt"
+        ],
+        "outputs": [
+          "spotlight.json"
+        ],
+        "input_ports": [
+          {
+            "name": "input",
+            "format": "txt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "spotlight.json"
+          }
+        ],
+        "position_x": 900.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-dbpedia-spotlight-exchange-4",
+        "task_name": "dbpedia_spotlight_exchange",
+        "inputs": [
+          "spotlight.json"
+        ],
+        "outputs": [
+          "te.json"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "spotlight.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "te.json"
+          }
+        ],
+        "position_x": 1120.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-aggregate3-te-json-5",
+        "task_name": "aggregate3_te_json",
+        "inputs": [
+          "te.json",
+          "te.json",
+          "te.json"
+        ],
+        "outputs": [
+          "te.json"
+        ],
+        "input_ports": [
+          {
+            "name": "json1",
+            "format": "te.json"
+          },
+          {
+            "name": "json2",
+            "format": "te.json"
+          },
+          {
+            "name": "json3",
+            "format": "te.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "te.json"
+          }
+        ],
+        "position_x": 1340.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-construct-rdf-from-te-json-mappings-only-6",
+        "task_name": "construct_rdf_from_te_json_mappings_only",
+        "inputs": [
+          "te.json"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "te.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 1560.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-paris-entity-matching-7",
+        "task_name": "paris_entity_matching",
+        "inputs": [
+          "nt",
+          "nt"
+        ],
+        "outputs": [
+          "paris.csv"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          },
+          {
+            "name": "kg",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "paris.csv"
+          }
+        ],
+        "position_x": 1780.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-paris-exchange-8",
+        "task_name": "paris_exchange",
+        "inputs": [
+          "paris.csv"
+        ],
+        "outputs": [
+          "er.json"
+        ],
+        "input_ports": [
+          {
+            "name": "input",
+            "format": "paris.csv"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "er.json"
+          }
+        ],
+        "position_x": 2000.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-fusion-first-value-9",
+        "task_name": "fusion_first_value",
+        "inputs": [
+          "nt",
+          "nt",
+          "er.json"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          },
+          {
+            "name": "kg",
+            "format": "nt"
+          },
+          {
+            "name": "matches1",
+            "format": "er.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 2220.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-type-inference-ontology-simple-10",
+        "task_name": "type_inference_ontology_simple",
+        "inputs": [
+          "nt"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "result",
+            "format": "nt"
+          }
+        ],
+        "position_x": 2440.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-kg-sink",
+        "task_name": "KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 2660.0,
+        "position_y": 140.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "sink"
+      }
+    ],
+    "edges": [
+      {
+        "source": "n-source",
+        "target": "n-corenlp-openie-extraction-0",
+        "source_handle": "out:txt",
+        "target_handle": "in:input",
+        "format_label": "txt"
+      },
+      {
+        "source": "n-corenlp-openie-extraction-0",
+        "target": "n-corenlp-exchange-1",
+        "source_handle": "out:output",
+        "target_handle": "in:input",
+        "format_label": "openie.json"
+      },
+      {
+        "source": "n-corenlp-exchange-1",
+        "target": "n-label-alias-embedding-rl-2",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-source",
+        "target": "n-dbpedia-spotlight-ner-nel-3",
+        "source_handle": "out:txt",
+        "target_handle": "in:input",
+        "format_label": "txt"
+      },
+      {
+        "source": "n-dbpedia-spotlight-ner-nel-3",
+        "target": "n-dbpedia-spotlight-exchange-4",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "spotlight.json"
+      },
+      {
+        "source": "n-dbpedia-spotlight-exchange-4",
+        "target": "n-aggregate3-te-json-5",
+        "source_handle": "out:output",
+        "target_handle": "in:json1",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-dbpedia-spotlight-exchange-4",
+        "target": "n-aggregate3-te-json-5",
+        "source_handle": "out:output",
+        "target_handle": "in:json2",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-dbpedia-spotlight-exchange-4",
+        "target": "n-aggregate3-te-json-5",
+        "source_handle": "out:output",
+        "target_handle": "in:json3",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-aggregate3-te-json-5",
+        "target": "n-construct-rdf-from-te-json-mappings-only-6",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-construct-rdf-from-te-json-mappings-only-6",
+        "target": "n-paris-entity-matching-7",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-paris-entity-matching-7",
+        "source_handle": "out:nt",
+        "target_handle": "in:kg",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-paris-entity-matching-7",
+        "target": "n-paris-exchange-8",
+        "source_handle": "out:output",
+        "target_handle": "in:input",
+        "format_label": "paris.csv"
+      },
+      {
+        "source": "n-construct-rdf-from-te-json-mappings-only-6",
+        "target": "n-fusion-first-value-9",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-fusion-first-value-9",
+        "source_handle": "out:nt",
+        "target_handle": "in:kg",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-paris-exchange-8",
+        "target": "n-fusion-first-value-9",
+        "source_handle": "out:output",
+        "target_handle": "in:matches1",
+        "format_label": "er.json"
+      },
+      {
+        "source": "n-fusion-first-value-9",
+        "target": "n-type-inference-ontology-simple-10",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-type-inference-ontology-simple-10",
+        "target": "n-kg-sink",
+        "source_handle": "out:result",
+        "target_handle": "in:any",
+        "format_label": "nt"
+      }
+    ]
+  },
+  {
+    "id": "text_alt",
+    "name": "Text Alt",
+    "description": "(semi expensive) Use mini transformer to link entities and relations (label+alias)",
+    "nodes": [
+      {
+        "id": "n-source",
+        "task_name": "Text",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 80.0,
+        "node_type": "dataNode",
+        "format": "txt",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-seed",
+        "task_name": "Seed KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 220.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-corenlp-openie-extraction-0",
+        "task_name": "corenlp_openie_extraction",
+        "inputs": [
+          "txt"
+        ],
+        "outputs": [
+          "openie.json"
+        ],
+        "input_ports": [
+          {
+            "name": "input",
+            "format": "txt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "openie.json"
+          }
+        ],
+        "position_x": 240.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-corenlp-exchange-1",
+        "task_name": "corenlp_exchange",
+        "inputs": [
+          "openie.json"
+        ],
+        "outputs": [
+          "te.json"
+        ],
+        "input_ports": [
+          {
+            "name": "input",
+            "format": "openie.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "te.json"
+          }
+        ],
+        "position_x": 460.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-label-alias-embedding-el-2",
+        "task_name": "label_alias_embedding_el",
+        "inputs": [
+          "te.json",
+          "nt"
+        ],
+        "outputs": [
+          "te.json"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "te.json"
+          },
+          {
+            "name": "target",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "te.json"
+          }
+        ],
+        "position_x": 680.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-label-alias-embedding-rl-3",
+        "task_name": "label_alias_embedding_rl",
+        "inputs": [
+          "te.json"
+        ],
+        "outputs": [
+          "te.json"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "te.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "te.json"
+          }
+        ],
+        "position_x": 900.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-aggregate3-te-json-4",
+        "task_name": "aggregate3_te_json",
+        "inputs": [
+          "te.json",
+          "te.json",
+          "te.json"
+        ],
+        "outputs": [
+          "te.json"
+        ],
+        "input_ports": [
+          {
+            "name": "json1",
+            "format": "te.json"
+          },
+          {
+            "name": "json2",
+            "format": "te.json"
+          },
+          {
+            "name": "json3",
+            "format": "te.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "te.json"
+          }
+        ],
+        "position_x": 1120.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-construct-rdf-from-te-json-5",
+        "task_name": "construct_rdf_from_te_json",
+        "inputs": [
+          "te.json"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "te.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 1340.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-select-first-value-6",
+        "task_name": "select_first_value",
+        "inputs": [
+          "nt",
+          "nt"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          },
+          {
+            "name": "target",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 1560.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-type-inference-ontology-simple-7",
+        "task_name": "type_inference_ontology_simple",
+        "inputs": [
+          "nt"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "result",
+            "format": "nt"
+          }
+        ],
+        "position_x": 1780.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-kg-sink",
+        "task_name": "KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 2000.0,
+        "position_y": 140.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "sink"
+      }
+    ],
+    "edges": [
+      {
+        "source": "n-source",
+        "target": "n-corenlp-openie-extraction-0",
+        "source_handle": "out:txt",
+        "target_handle": "in:input",
+        "format_label": "txt"
+      },
+      {
+        "source": "n-corenlp-openie-extraction-0",
+        "target": "n-corenlp-exchange-1",
+        "source_handle": "out:output",
+        "target_handle": "in:input",
+        "format_label": "openie.json"
+      },
+      {
+        "source": "n-corenlp-exchange-1",
+        "target": "n-label-alias-embedding-el-2",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-label-alias-embedding-el-2",
+        "source_handle": "out:nt",
+        "target_handle": "in:target",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-label-alias-embedding-el-2",
+        "target": "n-label-alias-embedding-rl-3",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-label-alias-embedding-rl-3",
+        "target": "n-aggregate3-te-json-4",
+        "source_handle": "out:output",
+        "target_handle": "in:json1",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-label-alias-embedding-rl-3",
+        "target": "n-aggregate3-te-json-4",
+        "source_handle": "out:output",
+        "target_handle": "in:json2",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-label-alias-embedding-rl-3",
+        "target": "n-aggregate3-te-json-4",
+        "source_handle": "out:output",
+        "target_handle": "in:json3",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-aggregate3-te-json-4",
+        "target": "n-construct-rdf-from-te-json-5",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-construct-rdf-from-te-json-5",
+        "target": "n-select-first-value-6",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-select-first-value-6",
+        "source_handle": "out:nt",
+        "target_handle": "in:target",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-select-first-value-6",
+        "target": "n-type-inference-ontology-simple-7",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-type-inference-ontology-simple-7",
+        "target": "n-kg-sink",
+        "source_handle": "out:result",
+        "target_handle": "in:any",
+        "format_label": "nt"
+      }
+    ]
+  },
+  {
+    "id": "text_llm",
+    "name": "Text LLM",
+    "description": "Extract RDF from TEXT using LLM",
+    "nodes": [
+      {
+        "id": "n-source",
+        "task_name": "Text",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 80.0,
+        "node_type": "dataNode",
+        "format": "txt",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-seed",
+        "task_name": "Seed KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 20.0,
+        "position_y": 220.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "source"
+      },
+      {
+        "id": "n-llm-task-text-triple-extract-v1-0",
+        "task_name": "llm_task_text_triple_extract_v1",
+        "inputs": [
+          "txt"
+        ],
+        "outputs": [
+          "te.json"
+        ],
+        "input_ports": [
+          {
+            "name": "input",
+            "format": "txt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "te.json"
+          }
+        ],
+        "position_x": 240.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-label-alias-embedding-el-1",
+        "task_name": "label_alias_embedding_el",
+        "inputs": [
+          "te.json",
+          "nt"
+        ],
+        "outputs": [
+          "te.json"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "te.json"
+          },
+          {
+            "name": "target",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "te.json"
+          }
+        ],
+        "position_x": 460.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-label-alias-embedding-rl-2",
+        "task_name": "label_alias_embedding_rl",
+        "inputs": [
+          "te.json"
+        ],
+        "outputs": [
+          "te.json"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "te.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "te.json"
+          }
+        ],
+        "position_x": 680.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-aggregate3-te-json-3",
+        "task_name": "aggregate3_te_json",
+        "inputs": [
+          "te.json",
+          "te.json",
+          "te.json"
+        ],
+        "outputs": [
+          "te.json"
+        ],
+        "input_ports": [
+          {
+            "name": "json1",
+            "format": "te.json"
+          },
+          {
+            "name": "json2",
+            "format": "te.json"
+          },
+          {
+            "name": "json3",
+            "format": "te.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "te.json"
+          }
+        ],
+        "position_x": 900.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-construct-rdf-from-te-json-4",
+        "task_name": "construct_rdf_from_te_json",
+        "inputs": [
+          "te.json"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "te.json"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 1120.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-select-first-value-5",
+        "task_name": "select_first_value",
+        "inputs": [
+          "nt",
+          "nt"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          },
+          {
+            "name": "target",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "output",
+            "format": "nt"
+          }
+        ],
+        "position_x": 1340.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-type-inference-ontology-simple-6",
+        "task_name": "type_inference_ontology_simple",
+        "inputs": [
+          "nt"
+        ],
+        "outputs": [
+          "nt"
+        ],
+        "input_ports": [
+          {
+            "name": "source",
+            "format": "nt"
+          }
+        ],
+        "output_ports": [
+          {
+            "name": "result",
+            "format": "nt"
+          }
+        ],
+        "position_x": 1560.0,
+        "position_y": 140.0
+      },
+      {
+        "id": "n-kg-sink",
+        "task_name": "KG",
+        "inputs": [],
+        "outputs": [],
+        "position_x": 1780.0,
+        "position_y": 140.0,
+        "node_type": "dataNode",
+        "format": "nt",
+        "data_kind": "sink"
+      }
+    ],
+    "edges": [
+      {
+        "source": "n-source",
+        "target": "n-llm-task-text-triple-extract-v1-0",
+        "source_handle": "out:txt",
+        "target_handle": "in:input",
+        "format_label": "txt"
+      },
+      {
+        "source": "n-llm-task-text-triple-extract-v1-0",
+        "target": "n-label-alias-embedding-el-1",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-label-alias-embedding-el-1",
+        "source_handle": "out:nt",
+        "target_handle": "in:target",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-label-alias-embedding-el-1",
+        "target": "n-label-alias-embedding-rl-2",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-label-alias-embedding-rl-2",
+        "target": "n-aggregate3-te-json-3",
+        "source_handle": "out:output",
+        "target_handle": "in:json1",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-label-alias-embedding-rl-2",
+        "target": "n-aggregate3-te-json-3",
+        "source_handle": "out:output",
+        "target_handle": "in:json2",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-label-alias-embedding-rl-2",
+        "target": "n-aggregate3-te-json-3",
+        "source_handle": "out:output",
+        "target_handle": "in:json3",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-aggregate3-te-json-3",
+        "target": "n-construct-rdf-from-te-json-4",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "te.json"
+      },
+      {
+        "source": "n-construct-rdf-from-te-json-4",
+        "target": "n-select-first-value-5",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-seed",
+        "target": "n-select-first-value-5",
+        "source_handle": "out:nt",
+        "target_handle": "in:target",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-select-first-value-5",
+        "target": "n-type-inference-ontology-simple-6",
+        "source_handle": "out:output",
+        "target_handle": "in:source",
+        "format_label": "nt"
+      },
+      {
+        "source": "n-type-inference-ontology-simple-6",
+        "target": "n-kg-sink",
+        "source_handle": "out:result",
+        "target_handle": "in:any",
+        "format_label": "nt"
+      }
+    ]
+  }
+]

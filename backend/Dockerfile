@@ -15,7 +15,8 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 RUN pip install --no-cache-dir "git+https://github.com/ScaDS/KGpipe.git"
 
 COPY backend/app.py /app/backend/app.py
-COPY runs.tsv /app
+COPY backend/fixtures_loader.py /app/backend/fixtures_loader.py
+COPY backend/fixtures /app/backend/fixtures
 
 EXPOSE 8000
 

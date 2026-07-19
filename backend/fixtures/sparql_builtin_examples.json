@@ -1,0 +1,30 @@
+[
+  {
+    "label": "All triples (sample, limit 20)",
+    "query": "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 20"
+  },
+  {
+    "label": "All task implementations",
+    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>\nCONSTRUCT { ?impl ?p ?o }\nWHERE {\n  ?impl a kgo:Implementation ;\n        ?p ?o .\n} LIMIT 60"
+  },
+  {
+    "label": "Tasks and their tools",
+    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>\nPREFIX kgr: <http://github.com/ScaDS/kgpipe/resource/>\nCONSTRUCT { ?impl kgo:usesTool ?tool }\nWHERE {\n  ?impl a kgo:Implementation ;\n        kgo:usesTool ?tool .\n} LIMIT 80"
+  },
+  {
+    "label": "Tasks and their implemented methods",
+    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>\nCONSTRUCT { ?impl kgo:implementsMethod ?method }\nWHERE {\n  ?impl a kgo:Implementation ;\n        kgo:implementsMethod ?method .\n} LIMIT 80"
+  },
+  {
+    "label": "Tasks and their parameters",
+    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/>\nCONSTRUCT { ?impl kgo:config_spec ?spec . ?spec kgo:hasParameter ?param . ?param ?pp ?po }\nWHERE {\n  ?impl a kgo:Implementation ;\n        kgo:config_spec ?spec .\n  ?spec kgo:hasParameter ?param .\n  OPTIONAL { ?param ?pp ?po . }\n} LIMIT 120"
+  },
+  {
+    "label": "Tasks with inputs and outputs",
+    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>\nCONSTRUCT { ?impl ?rel ?format }\nWHERE {\n  ?impl a kgo:Implementation .\n  { ?impl kgo:hasInput ?format . BIND(kgo:hasInput AS ?rel) }\n  UNION\n  { ?impl kgo:hasOutput ?format . BIND(kgo:hasOutput AS ?rel) }\n} LIMIT 100"
+  },
+  {
+    "label": "Full neighbourhood of one task (limit 1)",
+    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>\nCONSTRUCT { ?impl ?p ?o }\nWHERE {\n  ?impl a kgo:Implementation ; ?p ?o .\n} LIMIT 30"
+  }
+]

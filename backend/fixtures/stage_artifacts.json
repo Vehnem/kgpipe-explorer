@@ -1,0 +1,64 @@
+{
+  "stage_1": [
+    {
+      "name": "candidates.tsv",
+      "description": "Entity and relation candidates extracted from source text",
+      "mime_type": "text/tab-separated-values",
+      "base_size": 48000,
+      "spread": 12000
+    },
+    {
+      "name": "raw_triples.nt",
+      "description": "Initial triple dump in N-Triples format before linking",
+      "mime_type": "application/n-triples",
+      "base_size": 31500,
+      "spread": 8000
+    },
+    {
+      "name": "stage1_log.json",
+      "description": "Processing log with token counts and timing",
+      "mime_type": "application/json",
+      "base_size": 4200,
+      "spread": 600
+    }
+  ],
+  "stage_2": [
+    {
+      "name": "linked_triples.nt",
+      "description": "Triples after entity linking and disambiguation",
+      "mime_type": "application/n-triples",
+      "base_size": 29800,
+      "spread": 7500
+    },
+    {
+      "name": "linking_report.json",
+      "description": "Linking statistics: hit rate, NIL counts, confidence histogram",
+      "mime_type": "application/json",
+      "base_size": 2900,
+      "spread": 400
+    }
+  ],
+  "stage_3": [
+    {
+      "name": "final_kg.ttl",
+      "description": "Final knowledge graph serialised as Turtle",
+      "mime_type": "text/turtle",
+      "base_size": 85000,
+      "spread": 20000
+    },
+    {
+      "name": "eval_report.json",
+      "description": "Full evaluation metrics dump (precision, recall, F1 per relation type)",
+      "mime_type": "application/json",
+      "base_size": 6800,
+      "spread": 1200
+    },
+    {
+      "name": "run_summary.json",
+      "description": "High-level run metadata: pipeline ID, timestamp, total triples, wall time",
+      "mime_type": "application/json",
+      "base_size": 980,
+      "spread": 120
+    }
+  ]
+}
