@@ -11,7 +11,7 @@ type PageId = "builder" | "leaderboard" | "explorer" | "results" | "learn";
 
 export function App() {
   const [tasks, setTasks] = useState<TaskSpec[]>([]);
-  const [activePage, setActivePage] = useState<PageId>("builder");
+  const [activePage, setActivePage] = useState<PageId>("learn");
   const [selectedExplorerEntityId, setSelectedExplorerEntityId] = useState<string>("");
   const [loadingError, setLoadingError] = useState<string>("");
 
@@ -63,6 +63,13 @@ export function App() {
         <nav className="page-tabs" aria-label="Explorer pages" data-tutorial="app-tabs">
           <button
             type="button"
+            className={activePage === "learn" ? "active" : ""}
+            onClick={() => navigateToPage("learn")}
+          >
+            Learn
+          </button>
+          <button
+            type="button"
             className={activePage === "explorer" ? "active" : ""}
             onClick={() => navigateToPage("explorer")}
           >
@@ -88,13 +95,6 @@ export function App() {
             onClick={() => navigateToPage("leaderboard")}
           >
             Pipeline Leaderboard
-          </button>
-          <button
-            type="button"
-            className={activePage === "learn" ? "active" : ""}
-            onClick={() => navigateToPage("learn")}
-          >
-            Learn
           </button>
         </nav>
       </header>
@@ -133,7 +133,7 @@ function parseRoute(search: string): RouteState {
   const pageParam = params.get("page");
   const entityParam = params.get("entity");
   const parsedEntity = entityParam?.trim() ?? "";
-  const page = isPageId(pageParam) ? pageParam : parsedEntity ? "explorer" : "builder";
+  const page = isPageId(pageParam) ? pageParam : parsedEntity ? "explorer" : "learn";
   return {
     page,
     entity: parsedEntity

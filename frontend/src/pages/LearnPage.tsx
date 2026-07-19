@@ -76,29 +76,18 @@ const workflowCards: Array<{
 export function LearnPage({ onNavigate }: LearnPageProps) {
   return (
     <section className="page-scaffold learn-page">
-      <div className="learn-basics-block" data-tutorial="learn-basics">
+      <section className="learn-workflow" data-tutorial="learn-workflow">
         <header className="page-header learn-hero">
-          <p className="learn-eyebrow">Knowledge Graph Primer</p>
-          <h2>Learn the concepts behind KGpipe Explorer</h2>
+          <p className="learn-eyebrow">Welcome</p>
+          <h2>Get started with KGpipe Explorer</h2>
           <p>
-            This page gives you the mental model for the app: knowledge graphs,
-            triples, RDF, SPARQL, pipelines, metrics, and rankings. The goal is not
-            theory for theory's sake, but enough context to make the explorer useful.
+            This workspace helps you inspect knowledge-graph metadata, design
+            pipelines, compare run outputs, and reason about rankings. Follow the
+            suggested workflow below, then dig into the concepts when you want more
+            background.
           </p>
         </header>
 
-        <div className="learn-concept-grid">
-          {conceptCards.map((card) => (
-            <article key={card.title} className="learn-card">
-              <h3>{card.title}</h3>
-              <p>{card.body}</p>
-              <code>{card.example}</code>
-            </article>
-          ))}
-        </div>
-      </div>
-
-      <section className="learn-workflow" data-tutorial="learn-workflow">
         <div className="learn-section-heading">
           <p className="learn-eyebrow">From concept to app</p>
           <h3>Suggested workflow</h3>
@@ -116,6 +105,27 @@ export function LearnPage({ onNavigate }: LearnPageProps) {
           ))}
         </div>
       </section>
+
+      <div className="learn-basics-block" data-tutorial="learn-basics">
+        <div className="learn-section-heading">
+          <p className="learn-eyebrow">Knowledge Graph Primer</p>
+          <h3>Core concepts</h3>
+          <p>
+            Enough context to make the explorer useful: knowledge graphs, triples,
+            RDF, SPARQL, pipelines, metrics, and rankings.
+          </p>
+        </div>
+
+        <div className="learn-concept-grid">
+          {conceptCards.map((card) => (
+            <article key={card.title} className="learn-card">
+              <h3>{card.title}</h3>
+              <p>{card.body}</p>
+              <code>{card.example}</code>
+            </article>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }

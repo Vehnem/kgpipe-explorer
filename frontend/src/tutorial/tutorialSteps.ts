@@ -191,26 +191,26 @@ export const tutorialStepsByPage: Record<TutorialPage, TutorialStep[]> = {
   ],
   learn: [
     {
-      element: '[data-tutorial="learn-basics"]',
+      element: '[data-tutorial="learn-workflow"]',
       title: {
-        en: "Start with graph basics",
-        de: "Mit Graph-Grundlagen starten"
+        en: "Start with the workflow",
+        de: "Mit dem Workflow starten"
       },
       description: {
-        en: "The Learn page explains knowledge graphs, triples, RDF, SPARQL, pipelines, metrics, and how those ideas connect in KGpipe Explorer.",
-        de: "Die Learn-Seite erklaert Knowledge Graphs, Triples, RDF, SPARQL, Pipelines, Metriken und wie diese Ideen im KGpipe Explorer zusammenhaengen."
+        en: "Use the workflow cards to jump into the main features: inspect metadata, sketch a pipeline, compare outputs, and reason about rankings.",
+        de: "Nutze die Workflow-Karten, um die Hauptfunktionen zu entdecken: Metadaten ansehen, Pipeline skizzieren, Outputs vergleichen und Rankings bewerten."
       },
       side: "bottom"
     },
     {
-      element: '[data-tutorial="learn-workflow"]',
+      element: '[data-tutorial="learn-basics"]',
       title: {
-        en: "Then try the workflow",
-        de: "Danach den Workflow ausprobieren"
+        en: "Then review the concepts",
+        de: "Danach die Konzepte nachlesen"
       },
       description: {
-        en: "Use the workflow cards to jump from concept to practice: inspect metadata, sketch a pipeline, compare outputs, and reason about rankings.",
-        de: "Nutze die Workflow-Karten, um vom Konzept zur Praxis zu springen: Metadaten ansehen, Pipeline skizzieren, Outputs vergleichen und Rankings bewerten."
+        en: "Below the workflow, the Learn page explains knowledge graphs, triples, RDF, SPARQL, pipelines, metrics, and how those ideas connect in KGpipe Explorer.",
+        de: "Unter dem Workflow erklaert die Learn-Seite Knowledge Graphs, Triples, RDF, SPARQL, Pipelines, Metriken und wie diese Ideen im KGpipe Explorer zusammenhaengen."
       },
       side: "top"
     }
