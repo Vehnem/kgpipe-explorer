@@ -5,7 +5,8 @@
 - Practice guide is sidebar-only: load RDF Base → auto-select/remove fusion_first_value → add back → reconnect button → export.
 - Canvas clicks are intentionally avoided (driver.js overlays block reliable React Flow interaction).
 - Added a Results practice guide ("Practice: compare results"): select R_A → R_B → explain Data Artifacts → open Data View → Run Query.
-- Added a Leaderboard practice guide ("Practice: rebuild ranking"): clear selection/groups → select R_A/R_B/R_C → add Accuracy + Coverage → assign metrics → Figure view.
+- Added a Leaderboard practice guide ("Practice: rebuild ranking"): clear selection/groups → select R_A/R_B/R_C → add Accuracy + Coverage → assign metrics → Distribution view.
+- Builder practice / export copy remind that pipelines run externally and results must be reimported (see `docs/run-and-reimport.md`).
 - Tutorial steps can declare `advanceOn` event gates; pages emit matching `kgpipe-tutorial:*` window events.
 
 ## 2026-06-18

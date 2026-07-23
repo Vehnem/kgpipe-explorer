@@ -926,7 +926,18 @@ function PipelineExportModal({ nodes, edges, onClose }: PipelineExportModalProps
               </button>
             </div>
             <p className="export-cli-note">
-              Mock preview — the <code>kgpipe run</code> subcommand is not wired up yet.
+              Pipelines are executed <strong>outside</strong> this app. After you
+              run the config with KGpipe, reimport metrics into the backend
+              fixtures before opening Results or the Leaderboard.{" "}
+              <a
+                href="https://github.com/Vehnem/kgpipe-explorer/blob/main/docs/run-and-reimport.md"
+                target="_blank"
+                rel="noreferrer"
+              >
+                See run &amp; reimport
+              </a>
+              . The CLI line below is a mock preview — <code>kgpipe run</code> is
+              not wired here.
             </p>
             <pre className="export-code-block export-code-block--cli">{cliCommand}</pre>
           </div>

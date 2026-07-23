@@ -9,6 +9,11 @@ Move from Streamlit prototyping to a small web app architecture:
 - React frontend for DAG editing/visualization
 - Python API backend for compatibility logic and KG-backed data
 
+## Documentation
+
+Capability summaries, page notes, and the **export → external run → reimport**
+workflow live under [`docs/`](./docs/README.md).
+
 ## Layout
 
 - `frontend/`: React + TypeScript + Vite + React Flow

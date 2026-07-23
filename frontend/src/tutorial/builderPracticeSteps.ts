@@ -84,8 +84,8 @@ export const builderPracticeSteps: TutorialStep[] = [
       de: "5. Config exportieren"
     },
     description: {
-      en: "Click Export Pipeline Config to open the dialog. You can copy YAML or JSON for a runnable pipeline.conf.",
-      de: "Klicke auf Export Pipeline Config, um den Dialog zu oeffnen. Dort kannst du YAML oder JSON fuer eine pipeline.conf kopieren."
+      en: "Click Export Pipeline Config to open the dialog. You can copy YAML or JSON for a runnable pipeline.conf. Pipelines are executed outside this app — see run & reimport after export.",
+      de: "Klicke auf Export Pipeline Config, um den Dialog zu oeffnen. Dort kannst du YAML oder JSON fuer eine pipeline.conf kopieren. Pipelines werden ausserhalb der App ausgefuehrt — siehe Run & Reimport nach dem Export."
     },
     side: "right",
     advanceOn: { event: TUTORIAL_EVENTS.exportOpened }
@@ -93,12 +93,12 @@ export const builderPracticeSteps: TutorialStep[] = [
   {
     element: '[data-tutorial="builder-export-modal"]',
     title: {
-      en: "Done — review the export",
-      de: "Fertig — Export pruefen"
+      en: "Done — export, then run externally",
+      de: "Fertig — exportieren, dann extern ausfuehren"
     },
     description: {
-      en: "Name the pipeline, switch YAML/JSON if needed, and copy the config or CLI command. Close the dialog when you are finished.",
-      de: "Benenne die Pipeline, wechsle bei Bedarf zwischen YAML/JSON und kopiere Config oder CLI-Befehl. Schliesse den Dialog, wenn du fertig bist."
+      en: "Name the pipeline, copy YAML/JSON, then run it with KGpipe outside this demo. Reimport metrics into the backend fixtures before exploring Results or the Leaderboard (see docs: run-and-reimport).",
+      de: "Benenne die Pipeline, kopiere YAML/JSON und fuehre sie mit KGpipe ausserhalb dieser Demo aus. Importiere Metriken danach wieder in die Backend-Fixtures, bevor du Results oder das Leaderboard nutzt (siehe Docs: run-and-reimport)."
     },
     side: "left",
     deferElement: true

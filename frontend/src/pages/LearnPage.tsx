@@ -67,11 +67,19 @@ const workflowCards: Array<{
   }
 ];
 
+const RUN_AND_REIMPORT_DOC =
+  "https://github.com/Vehnem/kgpipe-explorer/blob/main/docs/run-and-reimport.md";
+
 const references: Array<{ kind: string; title: string; href: string }> = [
   {
     kind: "GitHub",
     title: "Demo",
     href: "https://github.com/Vehnem/kgpipe-explorer"
+  },
+  {
+    kind: "Docs",
+    title: "Run & reimport results",
+    href: RUN_AND_REIMPORT_DOC
   },
   {
     kind: "GitHub",
@@ -121,6 +129,30 @@ export function LearnPage({ onNavigate }: LearnPageProps) {
             </article>
           ))}
         </div>
+
+        <div className="learn-section-heading">
+          <p className="learn-eyebrow">Execution loop</p>
+          <h3>Export, run outside, then reimport</h3>
+        </div>
+        <article className="learn-inspect-card" data-tutorial="learn-run-reimport">
+          <div>
+            <h4>Pipelines are not executed in this app</h4>
+            <p>
+              The Pipeline Editor exports a <code>pipeline.conf</code> for external
+              KGpipe / experiment runs. Measured metrics and artifacts must be
+              reimported into the backend fixtures before they show up in Pipeline
+              Results or the Leaderboard.
+            </p>
+          </div>
+          <a
+            className="learn-doc-link"
+            href={RUN_AND_REIMPORT_DOC}
+            target="_blank"
+            rel="noreferrer"
+          >
+            See run &amp; reimport
+          </a>
+        </article>
 
         <div className="learn-section-heading">
           <p className="learn-eyebrow">Under the hood</p>
