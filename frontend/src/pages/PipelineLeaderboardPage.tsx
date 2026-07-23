@@ -11,11 +11,18 @@ import {
   fetchLeaderboardRunsTsv
 } from "../api";
 import { PipelineName } from "../components/PipelineName";
+import { MetricName } from "../components/MetricName";
 import {
   formatPipelineMetadataTooltip,
   PipelineMetadataProvider,
   usePipelineMetadata
 } from "../context/PipelineMetadataContext";
+import { MetricMetadataProvider } from "../context/MetricMetadataContext";
+import { emitTutorialEvent, TUTORIAL_EVENTS } from "../tutorial/tutorialEvents";
+import {
+  PRACTICE_LEADERBOARD_GROUP_ACCURACY,
+  PRACTICE_LEADERBOARD_GROUP_COVERAGE
+} from "../tutorial/tutorialTypes";
 
 type PipelineLeaderboardPageProps = {
   tasks: TaskSpec[];
@@ -137,6 +144,7 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
     useState<boolean>(false);
   const [previewMode, setPreviewMode] = useState<PreviewMode>("table");
   const [urlConfigHydrated, setUrlConfigHydrated] = useState<boolean>(false);
+  const [practiceMode, setPracticeMode] = useState(false);
 
   const defaultGroups = useMemo(
     () => groupsFromDefaults(leaderboardDefaults),
@@ -365,11 +373,39 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
       }
       const valid = current.filter((pipeline) => availablePipelines.includes(pipeline));
       if (valid.length === 0) {
-        return pipelineSelectionFromUrl ? [] : availablePipelines;
+        // Keep an intentional empty selection during URL/practice resets.
+        return practiceMode || pipelineSelectionFromUrl ? [] : availablePipelines;
       }
       return valid;
     });
-  }, [availablePipelines, pipelineSelectionFromUrl]);
+  }, [availablePipelines, pipelineSelectionFromUrl, practiceMode]);
+
+  useEffect(() => {
+    function onPracticeStarted() {
+      setPracticeMode(true);
+      setSelectedPipelines([]);
+      setGroupConfigs([]);
+      setPreviewMode("table");
+      setMetricSettings((current) => {
+        const next: Record<string, MetricSetting> = {};
+        for (const [metric, setting] of Object.entries(current)) {
+          next[metric] = { ...setting, groupId: "none" };
+        }
+        return next;
+      });
+      emitTutorialEvent(TUTORIAL_EVENTS.pipelinesSelected, { pipelines: [] });
+      emitTutorialEvent(TUTORIAL_EVENTS.groupsChanged, { groupIds: [] });
+    }
+    function onPracticeEnded() {
+      setPracticeMode(false);
+    }
+    window.addEventListener(TUTORIAL_EVENTS.practiceStarted, onPracticeStarted);
+    window.addEventListener(TUTORIAL_EVENTS.practiceEnded, onPracticeEnded);
+    return () => {
+      window.removeEventListener(TUTORIAL_EVENTS.practiceStarted, onPracticeStarted);
+      window.removeEventListener(TUTORIAL_EVENTS.practiceEnded, onPracticeEnded);
+    };
+  }, []);
 
   const selectedPipelineSet = useMemo(
     () => new Set(selectedPipelines),
@@ -462,8 +498,62 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
 
   const selectedBenchmarkRun = benchmarkRuns.find((run) => run.id === selectedBenchmarkRunId);
 
+  function emitPipelineSelection(pipelines: string[]) {
+    emitTutorialEvent(TUTORIAL_EVENTS.pipelinesSelected, { pipelines });
+  }
+
+  function addPracticeGroup(id: string, label: string) {
+    setGroupConfigs((current) => {
+      if (current.some((group) => group.id === id)) {
+        emitTutorialEvent(TUTORIAL_EVENTS.groupsChanged, {
+          groupIds: current.map((group) => group.id)
+        });
+        return current;
+      }
+      const next = [...current, { id, label, aggregator: "mean" as AggregationMethod, weight: 1 }];
+      emitTutorialEvent(TUTORIAL_EVENTS.groupsChanged, {
+        groupIds: next.map((group) => group.id)
+      });
+      return next;
+    });
+  }
+
+  function restorePracticeMetricGroups() {
+    setMetricSettings((current) => {
+      const next: Record<string, MetricSetting> = { ...current };
+      for (const metric of metricColumns) {
+        const groupId = defaultGroupForMetric(metric, metricGroupRules, "none");
+        if (
+          groupId !== PRACTICE_LEADERBOARD_GROUP_ACCURACY &&
+          groupId !== PRACTICE_LEADERBOARD_GROUP_COVERAGE
+        ) {
+          continue;
+        }
+        const previous = next[metric] ?? {
+          enabled: true,
+          groupId: "none" as MetricGroupId,
+          stageAggregator: "mean" as AggregationMethod,
+          stageSelection: "all"
+        };
+        next[metric] = {
+          ...previous,
+          enabled: true,
+          groupId
+        };
+      }
+      return next;
+    });
+    emitTutorialEvent(TUTORIAL_EVENTS.metricsAssigned);
+  }
+
+  function setPreviewModeAndEmit(mode: PreviewMode) {
+    setPreviewMode(mode);
+    emitTutorialEvent(TUTORIAL_EVENTS.previewModeChanged, { previewMode: mode });
+  }
+
   return (
     <PipelineMetadataProvider runId={selectedBenchmarkRunId}>
+    <MetricMetadataProvider ids={metricColumns}>
     <section className="page-scaffold">
       <header className="page-header">
         <h2>Pipeline Leaderboard</h2>
@@ -571,21 +661,28 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
             </label>
           </div>
 
-          <div className="pipeline-filter">
+          <div className="pipeline-filter" data-tutorial="leaderboard-pipelines">
             <div className="pipeline-filter-header">
               <h4>Pipeline Selection</h4>
               <div className="pipeline-filter-actions">
                 <button
                   type="button"
                   className="inline-add-btn"
-                  onClick={() => setSelectedPipelines(availablePipelines)}
+                  onClick={() => {
+                    setSelectedPipelines(availablePipelines);
+                    emitPipelineSelection(availablePipelines);
+                  }}
                 >
                   All
                 </button>
                 <button
                   type="button"
                   className="inline-add-btn"
-                  onClick={() => setSelectedPipelines([])}
+                  data-tutorial="leaderboard-pipelines-none"
+                  onClick={() => {
+                    setSelectedPipelines([]);
+                    emitPipelineSelection([]);
+                  }}
                 >
                   None
                 </button>
@@ -595,16 +692,23 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
               {availablePipelines.map((pipeline) => {
                 const checked = selectedPipelineSet.has(pipeline);
                 return (
-                  <label key={pipeline} className="pipeline-filter-item">
+                  <label
+                    key={pipeline}
+                    className="pipeline-filter-item"
+                    data-tutorial-pipeline={pipeline}
+                  >
                     <input
                       type="checkbox"
                       checked={checked}
                       onChange={(event) =>
                         setSelectedPipelines((current) => {
-                          if (event.target.checked) {
-                            return current.includes(pipeline) ? current : [...current, pipeline];
-                          }
-                          return current.filter((item) => item !== pipeline);
+                          const next = event.target.checked
+                            ? current.includes(pipeline)
+                              ? current
+                              : [...current, pipeline]
+                            : current.filter((item) => item !== pipeline);
+                          emitPipelineSelection(next);
+                          return next;
                         })
                       }
                     />
@@ -619,6 +723,44 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
               )}
             </div>
           </div>
+
+          {practiceMode ? (
+            <div className="leaderboard-practice-actions" data-tutorial="leaderboard-practice-actions">
+              <p className="muted" style={{ margin: "0 0 8px", fontSize: 12 }}>
+                Practice actions
+              </p>
+              <div className="group-actions-row">
+                <button
+                  type="button"
+                  className="inline-add-btn"
+                  data-tutorial="leaderboard-add-accuracy"
+                  onClick={() =>
+                    addPracticeGroup(PRACTICE_LEADERBOARD_GROUP_ACCURACY, "Accuracy")
+                  }
+                >
+                  Add Accuracy subgroup
+                </button>
+                <button
+                  type="button"
+                  className="inline-add-btn"
+                  data-tutorial="leaderboard-add-coverage"
+                  onClick={() =>
+                    addPracticeGroup(PRACTICE_LEADERBOARD_GROUP_COVERAGE, "Coverage")
+                  }
+                >
+                  Add Coverage subgroup
+                </button>
+                <button
+                  type="button"
+                  className="inline-add-btn"
+                  data-tutorial="leaderboard-restore-metrics"
+                  onClick={restorePracticeMetricGroups}
+                >
+                  Assign metrics to subgroups
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div className="group-config-grid">
             {groupConfigs.map((group) => {
@@ -709,10 +851,14 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
                 setGroupConfigs((current) => {
                   const id = createSubgroupId(current);
                   const label = `Group ${current.length + 1}`;
-                  return [
+                  const next = [
                     ...current,
-                    { id, label, aggregator: "mean", weight: 1 }
+                    { id, label, aggregator: "mean" as AggregationMethod, weight: 1 }
                   ];
+                  emitTutorialEvent(TUTORIAL_EVENTS.groupsChanged, {
+                    groupIds: next.map((group) => group.id)
+                  });
+                  return next;
                 })
               }
             >
@@ -747,7 +893,9 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
                     };
                     return (
                       <tr key={metric}>
-                        <td>{metric}</td>
+                        <td>
+                          <MetricName id={metric} />
+                        </td>
                         <td>
                           <input
                             type="checkbox"
@@ -847,35 +995,37 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
               <button
                 type="button"
                 className={previewMode === "table" ? "active" : ""}
-                onClick={() => setPreviewMode("table")}
+                onClick={() => setPreviewModeAndEmit("table")}
               >
                 Table
               </button>
               <button
                 type="button"
                 className={previewMode === "distribution" ? "active" : ""}
-                onClick={() => setPreviewMode("distribution")}
+                data-tutorial="leaderboard-preview-distribution"
+                onClick={() => setPreviewModeAndEmit("distribution")}
               >
                 Distribution
               </button>
               <button
                 type="button"
                 className={previewMode === "distribution_figure" ? "active" : ""}
-                onClick={() => setPreviewMode("distribution_figure")}
+                data-tutorial="leaderboard-preview-figure"
+                onClick={() => setPreviewModeAndEmit("distribution_figure")}
               >
                 Figure
               </button>
               <button
                 type="button"
                 className={previewMode === "distribution_bars" ? "active" : ""}
-                onClick={() => setPreviewMode("distribution_bars")}
+                onClick={() => setPreviewModeAndEmit("distribution_bars")}
               >
                 Bars
               </button>
               <button
                 type="button"
                 className={previewMode === "distribution_heatmap" ? "active" : ""}
-                onClick={() => setPreviewMode("distribution_heatmap")}
+                onClick={() => setPreviewModeAndEmit("distribution_heatmap")}
               >
                 Heatmap
               </button>
@@ -1035,7 +1185,13 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
           <thead>
             <tr>
               {columns.map((columnName) => (
-                <th key={columnName}>{columnName}</th>
+                <th key={columnName}>
+                  {metricColumns.includes(columnName) ? (
+                    <MetricName id={columnName} />
+                  ) : (
+                    columnName
+                  )}
+                </th>
               ))}
             </tr>
           </thead>
@@ -1067,6 +1223,7 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
         </table>
       </div>
     </section>
+    </MetricMetadataProvider>
     </PipelineMetadataProvider>
   );
 }

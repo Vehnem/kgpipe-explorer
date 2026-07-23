@@ -81,6 +81,20 @@ export type PipelineMetadata = {
 /** pipeline_id → metadata */
 export type PipelineMetadataMap = Record<string, PipelineMetadata>;
 
+export type MeasurementMetadata = {
+  key: string;
+  measurement_name: string;
+  unit?: string | null;
+  alias: string[];
+  measurement_uri?: string | null;
+  metric_key: string;
+  metric_description?: string | null;
+  metric_type?: string | null;
+};
+
+/** displayed metric name / alias → metadata */
+export type MeasurementMetadataMap = Record<string, MeasurementMetadata>;
+
 export type ExamplePipelineNode = {
   id: string;
   task_name: string;
@@ -216,6 +230,20 @@ export async function fetchPipelineMetadata(
     throw new Error(`Failed to fetch pipeline metadata (${res.status})`);
   }
   return (await res.json()) as PipelineMetadataMap;
+}
+
+export async function fetchMeasurementMetadata(
+  ids?: string[]
+): Promise<MeasurementMetadataMap> {
+  const url = new URL(`${API_BASE}/metrics/metadata`);
+  if (ids && ids.length > 0) {
+    url.searchParams.set("ids", ids.join(","));
+  }
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch measurement metadata (${res.status})`);
+  }
+  return (await res.json()) as MeasurementMetadataMap;
 }
 
 export async function fetchBenchmarkRuns(): Promise<BenchmarkRun[]> {

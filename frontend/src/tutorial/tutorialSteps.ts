@@ -3,6 +3,18 @@ import type { TutorialPage, TutorialStep } from "./tutorialTypes";
 export const tutorialStepsByPage: Record<TutorialPage, TutorialStep[]> = {
   builder: [
     {
+      element: '[data-tutorial="builder-examples"]',
+      title: {
+        en: "Start from an example",
+        de: "Mit einem Beispiel starten"
+      },
+      description: {
+        en: "Load an existing pipeline from this menu to see a complete DAG on the canvas. This is the fastest way to explore how sources, tasks, and sinks connect.",
+        de: "Lade hier eine bestehende Pipeline, um einen vollstaendigen DAG auf dem Canvas zu sehen. So erkennst du am schnellsten, wie Quellen, Tasks und Senken zusammenhaengen."
+      },
+      side: "right"
+    },
+    {
       element: '[data-tutorial="app-tabs"]',
       title: {
         en: "Main areas",

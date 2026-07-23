@@ -48,12 +48,6 @@ const workflowCards: Array<{
   page: "explorer" | "builder" | "results" | "leaderboard";
 }> = [
   {
-    title: "Inspect KG metadata",
-    body: "Use the Metadata Explorer to see how tasks, implementations, metrics, and runs connect inside the KGpipe graph.",
-    action: "Open Metadata Explorer",
-    page: "explorer"
-  },
-  {
     title: "Sketch a pipeline",
     body: "Use the Pipeline Editor to connect data sources, processing tasks, and target outputs as a DAG-style workflow.",
     action: "Open Pipeline Editor",
@@ -70,6 +64,29 @@ const workflowCards: Array<{
     body: "Use the Leaderboard to explore how metric groups, aggregators, and weights influence pipeline order.",
     action: "Open Leaderboard",
     page: "leaderboard"
+  }
+];
+
+const references: Array<{ kind: string; title: string; href: string }> = [
+  {
+    kind: "GitHub",
+    title: "Demo",
+    href: "https://github.com/Vehnem/kgpipe-explorer"
+  },
+  {
+    kind: "GitHub",
+    title: "KGpipe",
+    href: "https://github.com/ScaDS/KGpipe"
+  },
+  {
+    kind: "Paper",
+    title: "Framework Paper",
+    href: "https://arxiv.org/abs/2511.18364"
+  },
+  {
+    kind: "Paper",
+    title: "Benchmark Paper",
+    href: "https://arxiv.org/abs/2605.22304"
   }
 ];
 
@@ -104,6 +121,39 @@ export function LearnPage({ onNavigate }: LearnPageProps) {
             </article>
           ))}
         </div>
+
+        <div className="learn-section-heading">
+          <p className="learn-eyebrow">Under the hood</p>
+          <h3>Debug / inspect metadata</h3>
+        </div>
+        <article className="learn-inspect-card">
+          <div>
+            <h4>Metadata Explorer</h4>
+            <p>
+              See how tasks, implementations, metrics, and runs connect inside the
+              KGpipe graph when you need to debug or inspect the underlying
+              metadata.
+            </p>
+          </div>
+          <button type="button" onClick={() => onNavigate("explorer")}>
+            Open Metadata Explorer
+          </button>
+        </article>
+
+        <div className="learn-section-heading">
+          <p className="learn-eyebrow">Source material</p>
+          <h3>References</h3>
+        </div>
+        <ul className="learn-references">
+          {references.map((ref) => (
+            <li key={ref.href}>
+              <span className="learn-reference-kind">{ref.kind}</span>
+              <a href={ref.href} target="_blank" rel="noreferrer">
+                {ref.title}
+              </a>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <div className="learn-basics-block" data-tutorial="learn-basics">

@@ -6,7 +6,10 @@ import {
   fetchResultsArtifacts
 } from "../api";
 import { PipelineName } from "../components/PipelineName";
+import { MetricName } from "../components/MetricName";
 import { PipelineMetadataProvider } from "../context/PipelineMetadataContext";
+import { MetricMetadataProvider } from "../context/MetricMetadataContext";
+import { emitTutorialEvent, TUTORIAL_EVENTS } from "../tutorial/tutorialEvents";
 
 export type ResultsPageProps = {
   tasks: TaskSpec[];
@@ -143,7 +146,9 @@ function MetricsTable({ metricNames, pA, pB, getValue }: MetricsTableProps) {
             const delta = valA !== null && valB !== null ? valB - valA : null;
             return (
               <tr key={metric}>
-                <td style={{ fontFamily: "monospace", fontSize: 12 }}>{metric}</td>
+                <td style={{ fontFamily: "monospace", fontSize: 12 }}>
+                  <MetricName id={metric} />
+                </td>
                 {pA && (
                   <td>
                     {valA !== null ? (
@@ -275,6 +280,213 @@ function ArtifactsPanel({ pipelines, rows, artifacts, artifactsError }: Artifact
 }
 
 // ---------------------------------------------------------------------------
+// Data view (query final pipeline KGs)
+// ---------------------------------------------------------------------------
+
+const DEFAULT_DATA_VIEW_QUERY = `CONSTRUCT { ?s ?p ?o }
+WHERE { ?s ?p ?o }
+LIMIT 50`;
+
+type DataTab = "artifacts" | "dataview";
+type DataViewResultMode = "table" | "graph";
+
+type FinalKgTarget = {
+  pipeline: string;
+  stage: string | null;
+  file: ArtifactFile | null;
+};
+
+/** Prefer an explicit final_kg.* artifact; otherwise the last stage's RDF dump. */
+function resolveFinalKgTarget(
+  pipeline: string,
+  rows: RunRow[],
+  artifacts: ResultsArtifacts | null
+): FinalKgTarget {
+  const stages = [...new Set(rows.filter((r) => r.pipeline === pipeline).map((r) => r.stage))];
+  const pipelineArtifacts = artifacts?.[pipeline];
+
+  if (pipelineArtifacts) {
+    for (const stage of stages) {
+      const files = pipelineArtifacts[stage] ?? [];
+      const finalFile = files.find((f) => /^final_kg\./i.test(f.name));
+      if (finalFile) return { pipeline, stage, file: finalFile };
+    }
+  }
+
+  const lastStage = stages.length > 0 ? stages[stages.length - 1] : null;
+  if (lastStage && pipelineArtifacts) {
+    const files = pipelineArtifacts[lastStage] ?? [];
+    const rdfFile =
+      files.find(
+        (f) =>
+          f.mime_type === "text/turtle" ||
+          f.mime_type === "application/n-triples" ||
+          /\.(ttl|nt|rdf)$/i.test(f.name)
+      ) ?? null;
+    return { pipeline, stage: lastStage, file: rdfFile };
+  }
+
+  return { pipeline, stage: lastStage, file: null };
+}
+
+type DataViewPanelProps = {
+  pipelines: string[];
+  rows: RunRow[];
+  artifacts: ResultsArtifacts | null;
+};
+
+function DataViewPanel({ pipelines, rows, artifacts }: DataViewPanelProps) {
+  const [queryText, setQueryText] = useState(DEFAULT_DATA_VIEW_QUERY);
+  const [resultMode, setResultMode] = useState<DataViewResultMode>("table");
+  const [queryStatus, setQueryStatus] = useState("");
+  const [hasRun, setHasRun] = useState(false);
+
+  const targets = useMemo(
+    () => pipelines.map((p) => resolveFinalKgTarget(p, rows, artifacts)),
+    [pipelines, rows, artifacts]
+  );
+
+  function handleRunQuery() {
+    const trimmed = queryText.trim();
+    if (!trimmed) {
+      setQueryStatus("Cannot run an empty query.");
+      return;
+    }
+    if (targets.length === 0) {
+      setQueryStatus("Select 1 or 2 pipelines to query their final KGs.");
+      return;
+    }
+    // Placeholder: backend SPARQL against per-pipeline final KGs is not wired yet.
+    setHasRun(true);
+    const labels = targets
+      .map((t) => (t.file ? t.file.path : `${t.pipeline}/${t.stage ?? "final"}`))
+      .join(" and ");
+    setQueryStatus(
+      `Would send the same SPARQL query to ${targets.length} final KG${
+        targets.length === 1 ? "" : "s"
+      }: ${labels}. Endpoint wiring coming soon — results will appear below.`
+    );
+    emitTutorialEvent(TUTORIAL_EVENTS.queryRan);
+  }
+
+  return (
+    <div className="results-dataview" data-tutorial="results-dataview">
+      <section className="results-dataview-query">
+        <div className="results-section-header" style={{ marginBottom: 8 }}>
+          <h4 style={{ margin: 0, fontSize: 13 }}>SPARQL Query</h4>
+          <span className="muted" style={{ fontSize: 12 }}>
+            Same query runs against each selected final pipeline KG
+          </span>
+        </div>
+        <label htmlFor="results-dataview-query" className="muted" style={{ fontSize: 12 }}>
+          Query text
+        </label>
+        <textarea
+          id="results-dataview-query"
+          className="results-dataview-textarea"
+          value={queryText}
+          onChange={(e) => setQueryText(e.target.value)}
+          rows={8}
+          spellCheck={false}
+        />
+        <div className="results-dataview-targets">
+          {targets.map((t, idx) => (
+            <div key={t.pipeline} className="results-dataview-target">
+              <span className="results-pipeline-index">{idx + 1}</span>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 12 }}>
+                  <PipelineName id={t.pipeline} />
+                </div>
+                <div className="muted" style={{ fontSize: 11 }}>
+                  {t.file
+                    ? `${t.stage} · ${t.file.name}`
+                    : t.stage
+                    ? `${t.stage} · final KG not listed yet`
+                    : "No stage data for final KG"}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <button type="button" data-tutorial="results-run-query" onClick={handleRunQuery}>
+            Run Query
+          </button>
+          <div className="preview-mode-toggle" role="tablist" aria-label="Result view mode">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={resultMode === "table"}
+              className={resultMode === "table" ? "active" : ""}
+              onClick={() => setResultMode("table")}
+            >
+              Result table
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={resultMode === "graph"}
+              className={resultMode === "graph" ? "active" : ""}
+              onClick={() => setResultMode("graph")}
+            >
+              Graph
+            </button>
+          </div>
+        </div>
+        {queryStatus ? <p style={{ margin: "8px 0 0", fontSize: 13 }}>{queryStatus}</p> : null}
+      </section>
+
+      <div className="results-dataview-results">
+        {targets.map((t) => (
+          <div key={t.pipeline} className="results-dataview-result-card">
+            <h4 className="results-artifact-pipeline">
+              <PipelineName id={t.pipeline} />
+            </h4>
+            {resultMode === "table" ? (
+              <div className="table-frame results-dataview-table-placeholder">
+                {hasRun ? (
+                  <table className="leaderboard-table">
+                    <thead>
+                      <tr>
+                        <th>Subject</th>
+                        <th>Predicate</th>
+                        <th>Object</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td colSpan={3} className="muted" style={{ textAlign: "center" }}>
+                          SPARQL result rows will appear here once the final-KG endpoint is
+                          connected.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="muted" style={{ margin: 0, fontSize: 12 }}>
+                    Run a SPARQL query to populate the result table.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="graph-canvas-placeholder" style={{ minHeight: 280 }}>
+                <div className="graph-empty-state">
+                  <p>
+                    {hasRun
+                      ? "Graph rendering (as in Metadata Explorer) will appear here once results are available."
+                      : "Run a SPARQL CONSTRUCT query to render graph results."}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main page component
 // ---------------------------------------------------------------------------
 
@@ -295,6 +507,7 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
   type MetricsView = "summary" | "perstage";
   const [metricsView, setMetricsView] = useState<MetricsView>("summary");
   const [selectedStage, setSelectedStage] = useState<string>("");
+  const [dataTab, setDataTab] = useState<DataTab>("artifacts");
 
   useEffect(() => {
     fetchBenchmarkRuns()
@@ -363,12 +576,28 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
     }
   }, [allStages, selectedStage]);
 
+  useEffect(() => {
+    function onPracticeStarted() {
+      setSelectedPipelines([]);
+      setDataTab("artifacts");
+    }
+    window.addEventListener(TUTORIAL_EVENTS.practiceStarted, onPracticeStarted);
+    return () => window.removeEventListener(TUTORIAL_EVENTS.practiceStarted, onPracticeStarted);
+  }, []);
+
   function togglePipeline(pipeline: string) {
     setSelectedPipelines((prev) => {
-      if (prev.includes(pipeline)) return prev.filter((p) => p !== pipeline);
-      // Slide the window: replacing the oldest selection when cap is reached
-      if (prev.length >= 2) return [prev[1], pipeline];
-      return [...prev, pipeline];
+      let next: string[];
+      if (prev.includes(pipeline)) {
+        next = prev.filter((p) => p !== pipeline);
+      } else if (prev.length >= 2) {
+        // Slide the window: replacing the oldest selection when cap is reached
+        next = [prev[1], pipeline];
+      } else {
+        next = [...prev, pipeline];
+      }
+      emitTutorialEvent(TUTORIAL_EVENTS.pipelinesSelected, { pipelines: next });
+      return next;
     });
   }
 
@@ -387,12 +616,14 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
 
   return (
     <PipelineMetadataProvider runId={selectedBenchmarkRunId}>
+    <MetricMetadataProvider ids={metricNames}>
     <section className="page-scaffold">
       <header className="page-header">
         <h2>Pipeline Results</h2>
         <p>
-          Browse and compare evaluation metrics and data artifacts across pipeline runs.
-          Select up to two pipelines to see a side-by-side comparison with deltas.
+          Browse and compare evaluation metrics, data artifacts, and final knowledge graphs
+          across pipeline runs. Select up to two pipelines to see a side-by-side comparison
+          with deltas.
         </p>
       </header>
 
@@ -453,6 +684,7 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
                   key={p}
                   type="button"
                   className={`results-pipeline-btn${isSelected ? " selected" : ""}`}
+                  data-tutorial-pipeline={p}
                   onClick={() => togglePipeline(p)}
                 >
                   {isSelected && (
@@ -542,25 +774,65 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
       )}
 
       {/* ------------------------------------------------------------------ */}
-      {/* Data Artifacts                                                       */}
+      {/* Data: Artifacts | Data View                                          */}
       {/* ------------------------------------------------------------------ */}
       {selectedPipelines.length > 0 && (
         <div className="results-section" data-tutorial="results-artifacts">
-          <div className="results-section-header">
-            <h3>Data Artifacts</h3>
-            <span className="muted" style={{ fontSize: 12 }}>
-              Output files and run artifacts per stage
-            </span>
+          <div className="results-section-header" style={{ justifyContent: "flex-start" }}>
+            <nav className="page-tabs" aria-label="Data section tabs">
+              <button
+                type="button"
+                className={dataTab === "artifacts" ? "active" : ""}
+                data-tutorial="results-artifacts-tab"
+                onClick={() => {
+                  setDataTab("artifacts");
+                  emitTutorialEvent(TUTORIAL_EVENTS.dataTabChanged, { dataTab: "artifacts" });
+                }}
+              >
+                Data Artifacts
+              </button>
+              <button
+                type="button"
+                className={dataTab === "dataview" ? "active" : ""}
+                data-tutorial="results-dataview-tab"
+                onClick={() => {
+                  setDataTab("dataview");
+                  emitTutorialEvent(TUTORIAL_EVENTS.dataTabChanged, { dataTab: "dataview" });
+                }}
+              >
+                Data View
+              </button>
+            </nav>
           </div>
-          <ArtifactsPanel
-            pipelines={selectedPipelines}
-            rows={rows}
-            artifacts={artifacts}
-            artifactsError={artifactsError}
-          />
+
+          {dataTab === "artifacts" ? (
+            <>
+              <p className="muted" style={{ marginBottom: 8, fontSize: 12 }}>
+                Output files and run artifacts per stage
+              </p>
+              <ArtifactsPanel
+                pipelines={selectedPipelines}
+                rows={rows}
+                artifacts={artifacts}
+                artifactsError={artifactsError}
+              />
+            </>
+          ) : (
+            <>
+              <p className="muted" style={{ marginBottom: 8, fontSize: 12 }}>
+                Query the selected final pipeline knowledge graphs side by side
+              </p>
+              <DataViewPanel
+                pipelines={selectedPipelines}
+                rows={rows}
+                artifacts={artifacts}
+              />
+            </>
+          )}
         </div>
       )}
     </section>
+    </MetricMetadataProvider>
     </PipelineMetadataProvider>
   );
 }

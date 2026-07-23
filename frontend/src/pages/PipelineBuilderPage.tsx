@@ -24,6 +24,8 @@ import {
   toPipelineJson,
   toPipelineYaml
 } from "../pipelineExport";
+import { emitTutorialEvent, TUTORIAL_EVENTS } from "../tutorial/tutorialEvents";
+import { PRACTICE_TASK_NAME } from "../tutorial/tutorialTypes";
 
 type ParameterValue = string | number | boolean;
 
@@ -55,6 +57,7 @@ type PipelineBuilderPageProps = {
 export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
   const [selectedTask, setSelectedTask] = useState<string>("");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [configuringNodeId, setConfiguringNodeId] = useState<string | null>(null);
   const [search, setSearch] = useState<string>("");
   const [connectionError, setConnectionError] = useState<string>("");
@@ -65,6 +68,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
   const [dataElements, setDataElements] = useState<DataElement[]>([]);
   const [inspectedTask, setInspectedTask] = useState<TaskSpec | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [practiceMode, setPracticeMode] = useState(false);
 
   const configureHandlerRef = React.useRef<(nodeId: string) => void>(() => {});
   configureHandlerRef.current = (nodeId: string) => {
@@ -99,6 +103,42 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         // Non-critical — silently ignore if data elements are unavailable
       });
   }, []);
+
+  useEffect(() => {
+    function onFocusTask(event: Event) {
+      const detail = (event as CustomEvent<{ taskName?: string }>).detail;
+      if (!detail?.taskName) return;
+      setSearch(detail.taskName);
+    }
+    function onSelectTask(event: Event) {
+      const detail = (event as CustomEvent<{ taskName?: string }>).detail;
+      if (!detail?.taskName) return;
+      const match = nodes.find(
+        (node) =>
+          node.type === "taskNode" &&
+          (node.data as PipelineNodeData).label === detail.taskName
+      );
+      if (!match) return;
+      setSelectedNodeId(match.id);
+      setSelectedEdgeId(null);
+    }
+    function onPracticeStarted() {
+      setPracticeMode(true);
+    }
+    function onPracticeEnded() {
+      setPracticeMode(false);
+    }
+    window.addEventListener(TUTORIAL_EVENTS.focusTask, onFocusTask);
+    window.addEventListener(TUTORIAL_EVENTS.selectTask, onSelectTask);
+    window.addEventListener(TUTORIAL_EVENTS.practiceStarted, onPracticeStarted);
+    window.addEventListener(TUTORIAL_EVENTS.practiceEnded, onPracticeEnded);
+    return () => {
+      window.removeEventListener(TUTORIAL_EVENTS.focusTask, onFocusTask);
+      window.removeEventListener(TUTORIAL_EVENTS.selectTask, onSelectTask);
+      window.removeEventListener(TUTORIAL_EVENTS.practiceStarted, onPracticeStarted);
+      window.removeEventListener(TUTORIAL_EVENTS.practiceEnded, onPracticeEnded);
+    };
+  }, [nodes]);
 
   const taskByName = useMemo(
     () => Object.fromEntries(tasks.map((task) => [task.name, task])),
@@ -160,8 +200,10 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
     setNodes(newNodes);
     setEdges(newEdges);
     setSelectedNodeId(null);
+    setSelectedEdgeId(null);
     setConfiguringNodeId(null);
     setConnectionError("");
+    emitTutorialEvent(TUTORIAL_EVENTS.exampleLoaded, { exampleId });
   }
 
   const filteredTasks = useMemo(() => {
@@ -207,6 +249,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         }
       }
     ]);
+    emitTutorialEvent(TUTORIAL_EVENTS.taskAdded, { taskName });
   }
 
   function updateNodeParameter(nodeId: string, name: string, value: ParameterValue) {
@@ -310,10 +353,16 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         prev
       )
     );
+    emitTutorialEvent(TUTORIAL_EVENTS.edgeConnected);
   }
 
   function removeSelectedNode() {
     if (!selectedNodeId) return;
+    const selectedNode = nodes.find((node) => node.id === selectedNodeId);
+    const taskName =
+      selectedNode?.type === "taskNode"
+        ? (selectedNode.data as PipelineNodeData).label
+        : undefined;
     setNodes((prev) => prev.filter((node) => node.id !== selectedNodeId));
     setEdges((prev) =>
       prev.filter(
@@ -324,6 +373,117 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
       setConfiguringNodeId(null);
     }
     setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    emitTutorialEvent(TUTORIAL_EVENTS.nodeRemoved, {
+      nodeId: selectedNodeId,
+      taskName
+    });
+  }
+
+  function removeSelectedEdge() {
+    if (!selectedEdgeId) return;
+    setEdges((prev) => prev.filter((edge) => edge.id !== selectedEdgeId));
+    setSelectedEdgeId(null);
+  }
+
+  function nodeLabel(node: AnyNode): string {
+    return node.data.label;
+  }
+
+  function findNodeByIdOrLabel(id: string, label: string): AnyNode | undefined {
+    return nodes.find((node) => node.id === id) ?? nodes.find((node) => nodeLabel(node) === label);
+  }
+
+  function findTaskByLabel(label: string): AnyNode | undefined {
+    return nodes.find(
+      (node) => node.type === "taskNode" && (node.data as PipelineNodeData).label === label
+    );
+  }
+
+  /** Restore RDF Base wiring for the newest fusion_first_value node (practice guide). */
+  function reconnectPracticeTask(taskName: string) {
+    const candidates = nodes.filter(
+      (node) => node.type === "taskNode" && (node.data as PipelineNodeData).label === taskName
+    );
+    const fusion = candidates[candidates.length - 1];
+    if (!fusion) return;
+
+    const source = findNodeByIdOrLabel("n-source", "RDF");
+    const seed = findNodeByIdOrLabel("n-seed", "Seed KG");
+    const parisExchange =
+      findNodeByIdOrLabel("n-paris-exchange-1", "paris_exchange") ??
+      findTaskByLabel("paris_exchange");
+    const typeInference =
+      findNodeByIdOrLabel("n-type-inference-ontology-simple-3", "type_inference_ontology_simple") ??
+      findTaskByLabel("type_inference_ontology_simple");
+
+    if (!source || !seed || !parisExchange || !typeInference) {
+      setConnectionError("Could not find neighbor nodes to reconnect practice task.");
+      return;
+    }
+
+    const specs: Array<{
+      source: string;
+      target: string;
+      sourceHandle: string;
+      targetHandle: string;
+      label: string;
+    }> = [
+      {
+        source: source.id,
+        target: fusion.id,
+        sourceHandle: `out:${(source.data as DataNodeData).format || "nt"}`,
+        targetHandle: "in:source",
+        label: "nt"
+      },
+      {
+        source: seed.id,
+        target: fusion.id,
+        sourceHandle: `out:${(seed.data as DataNodeData).format || "nt"}`,
+        targetHandle: "in:kg",
+        label: "nt"
+      },
+      {
+        source: parisExchange.id,
+        target: fusion.id,
+        sourceHandle: "out:output",
+        targetHandle: "in:matches1",
+        label: "er.json"
+      },
+      {
+        source: fusion.id,
+        target: typeInference.id,
+        sourceHandle: "out:output",
+        targetHandle: "in:source",
+        label: "nt"
+      }
+    ];
+
+    setEdges((prev) => {
+      const withoutFusion = prev.filter(
+        (edge) => edge.source !== fusion.id && edge.target !== fusion.id
+      );
+      let next = withoutFusion;
+      for (const spec of specs) {
+        const color = formatColor(spec.label);
+        next = addEdge(
+          {
+            source: spec.source,
+            target: spec.target,
+            sourceHandle: spec.sourceHandle,
+            targetHandle: spec.targetHandle,
+            label: spec.label,
+            style: { stroke: color, strokeWidth: 2 },
+            labelStyle: { fill: color, fontWeight: 600 },
+            animated: false
+          },
+          next
+        );
+      }
+      return next;
+    });
+    setConnectionError("");
+    emitTutorialEvent(TUTORIAL_EVENTS.practiceReconnected, { taskName });
   }
 
   return (
@@ -333,7 +493,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         <p>React Flow prototype for DAG pipeline editing.</p>
 
         {examples.length > 0 && (
-          <>
+          <div data-tutorial="builder-examples">
             <label htmlFor="example-select">Load example pipeline</label>
             <select
               id="example-select"
@@ -352,7 +512,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
                 </option>
               ))}
             </select>
-          </>
+          </div>
         )}
 
         <h3 style={{ marginBottom: 4 }}>Data Elements</h3>
@@ -394,7 +554,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           <strong>+</strong>
           {" to add"}
         </div>
-        <div className="task-item-list">
+        <div className="task-item-list" data-tutorial="builder-task-list">
           {visibleTasks.map((task) => {
             const inputPorts = portsFromTask(task, "input");
             const outputPorts = portsFromTask(task, "output");
@@ -402,6 +562,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
               <div
                 key={task.name}
                 className={`task-list-item${task.name === selectedTask ? " selected" : ""}`}
+                data-tutorial-task={task.name}
                 onClick={() => {
                   setSelectedTask(task.name);
                   setInspectedTask(task);
@@ -465,6 +626,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         </div>
         <button
           className="danger-btn"
+          data-tutorial="builder-remove-node"
           onClick={removeSelectedNode}
           disabled={!selectedNodeId}
           title={
@@ -475,16 +637,50 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         >
           Remove Selected Node
         </button>
+        {practiceMode ? (
+          <button
+            type="button"
+            className="primary-btn"
+            data-tutorial="builder-reconnect"
+            onClick={() => reconnectPracticeTask(PRACTICE_TASK_NAME)}
+            title={`Restore ${PRACTICE_TASK_NAME} connections for the practice guide`}
+          >
+            Reconnect practice task
+          </button>
+        ) : null}
+        <button
+          className="danger-btn"
+          onClick={removeSelectedEdge}
+          disabled={!selectedEdgeId}
+          title={
+            selectedEdgeId
+              ? "Remove selected connection"
+              : "Select a connection on the canvas to remove"
+          }
+        >
+          Remove Selected Connection
+        </button>
         <p className="builder-connect-hint">
-          {selectedNodeId
-            ? `Selected node: ${nodes.find((node) => node.id === selectedNodeId)?.data.label ?? selectedNodeId}`
-            : "No node selected"}
+          {selectedEdgeId
+            ? (() => {
+                const edge = edges.find((e) => e.id === selectedEdgeId);
+                if (!edge) return "Selected connection";
+                const sourceLabel =
+                  nodes.find((n) => n.id === edge.source)?.data.label ?? edge.source;
+                const targetLabel =
+                  nodes.find((n) => n.id === edge.target)?.data.label ?? edge.target;
+                return `Selected connection: ${sourceLabel} → ${targetLabel}`;
+              })()
+            : selectedNodeId
+              ? `Selected node: ${nodes.find((node) => node.id === selectedNodeId)?.data.label ?? selectedNodeId}`
+              : "No node or connection selected"}
         </p>
         {connectionError ? (
           <p className="builder-connect-error">{connectionError}</p>
         ) : (
           <p className="builder-connect-hint">
-            Connect from right output handles to left input handles. Use ⚙ on a task to set parameters.
+            Connect from right output handles to left input handles. Click a connection to select it,
+            then remove it with the button or Delete/Backspace. Use ⚙ on a task to set parameters.
           </p>
         )}
         <h3>Loose Ends</h3>
@@ -493,13 +689,17 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         <button
           type="button"
           className="primary-btn"
+          data-tutorial="builder-export"
           disabled={taskNodeCount === 0}
           title={
             taskNodeCount === 0
               ? "Add task nodes to the canvas before exporting"
               : "Export pipeline as pipeline.conf (YAML/JSON)"
           }
-          onClick={() => setExportOpen(true)}
+          onClick={() => {
+            setExportOpen(true);
+            emitTutorialEvent(TUTORIAL_EVENTS.exportOpened);
+          }}
         >
           Export Pipeline Config
         </button>
@@ -511,10 +711,32 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          onNodeClick={(_, node) => setSelectedNodeId(node.id)}
-          onPaneClick={() => {
+          onNodeClick={(_, node) => {
+            setSelectedNodeId(node.id);
+            setSelectedEdgeId(null);
+            const taskName =
+              node.type === "taskNode"
+                ? (node.data as PipelineNodeData).label
+                : undefined;
+            emitTutorialEvent(TUTORIAL_EVENTS.nodeSelected, {
+              nodeId: node.id,
+              taskName
+            });
+          }}
+          onEdgeClick={(_, edge) => {
+            setSelectedEdgeId(edge.id);
             setSelectedNodeId(null);
           }}
+          onEdgesDelete={(deleted) => {
+            if (selectedEdgeId && deleted.some((edge) => edge.id === selectedEdgeId)) {
+              setSelectedEdgeId(null);
+            }
+          }}
+          onPaneClick={() => {
+            setSelectedNodeId(null);
+            setSelectedEdgeId(null);
+          }}
+          deleteKeyCode={["Backspace", "Delete"]}
           nodeTypes={{ taskNode: TaskNode, dataNode: DataNode }}
           fitView
         >
@@ -616,6 +838,7 @@ function PipelineExportModal({ nodes, edges, onClose }: PipelineExportModalProps
     <div className="modal-backdrop" onClick={handleBackdrop}>
       <div
         className="modal-card modal-card--wide"
+        data-tutorial="builder-export-modal"
         role="dialog"
         aria-modal="true"
         aria-label="Export pipeline configuration"
@@ -1187,7 +1410,10 @@ function TaskNode({ data, selected }: NodeProps<PipelineNode>) {
   const changedParams = changedParameterEntries(data.configSpec, data.parameterValues);
 
   return (
-    <div className={`task-node ${selected ? "selected" : ""}`}>
+    <div
+      className={`task-node ${selected ? "selected" : ""}`}
+      data-tutorial-node={data.label}
+    >
       <div className="task-node-header">
         <div className="task-node-title">{data.label}</div>
         {hasConfig && (

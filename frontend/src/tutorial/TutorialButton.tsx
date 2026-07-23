@@ -1,11 +1,22 @@
 import { useEffect, useRef, useState } from "react";
-import { startTutorialForPage } from "./tutorialDriver";
+import {
+  startBuilderPracticeGuide,
+  startLeaderboardPracticeGuide,
+  startResultsPracticeGuide,
+  startTutorialForPage
+} from "./tutorialDriver";
 import { getStoredTutorialLanguage, storeTutorialLanguage } from "./tutorialStorage";
 import type { TutorialLanguage, TutorialPage } from "./tutorialTypes";
 
 type TutorialButtonProps = {
   page: TutorialPage;
   onOpenLearn: () => void;
+};
+
+const PRACTICE_LABELS: Partial<Record<TutorialPage, string>> = {
+  builder: "Practice: edit a pipeline",
+  results: "Practice: compare results",
+  leaderboard: "Practice: rebuild ranking"
 };
 
 export function TutorialButton({ page, onOpenLearn }: TutorialButtonProps) {
@@ -33,10 +44,35 @@ export function TutorialButton({ page, onOpenLearn }: TutorialButtonProps) {
     startTutorialForPage(page, language);
   }
 
+  function handleStartPracticeGuide() {
+    setOpen(false);
+    if (page === "builder") {
+      startBuilderPracticeGuide(language);
+      return;
+    }
+    if (page === "results") {
+      startResultsPracticeGuide(language);
+      return;
+    }
+    if (page === "leaderboard") {
+      startLeaderboardPracticeGuide(language);
+    }
+  }
+
   function handleOpenLearn() {
     setOpen(false);
     onOpenLearn();
   }
+
+  const practiceLabel = PRACTICE_LABELS[page];
+  const helpBlurb =
+    page === "builder"
+      ? "Take the overview tour, or practice editing a pipeline step by step."
+      : page === "results"
+        ? "Take the overview tour, or practice comparing two pipelines step by step."
+        : page === "leaderboard"
+          ? "Take the overview tour, or practice rebuilding a ranking step by step."
+          : "Start a guided tour or open the Knowledge Graph primer.";
 
   return (
     <div ref={wrapperRef} className={`tutorial-help${page === "builder" ? " tutorial-help--builder" : ""}`}>
@@ -44,12 +80,17 @@ export function TutorialButton({ page, onOpenLearn }: TutorialButtonProps) {
         <section className="tutorial-help-menu" aria-label="Tutorial help menu">
           <div>
             <h2>Help</h2>
-            <p>Start a guided tour or open the Knowledge Graph primer.</p>
+            <p>{helpBlurb}</p>
           </div>
           <div className="tutorial-help-actions">
             <button type="button" onClick={handleStartTour}>
               Start page tour
             </button>
+            {practiceLabel ? (
+              <button type="button" onClick={handleStartPracticeGuide}>
+                {practiceLabel}
+              </button>
+            ) : null}
             <button type="button" onClick={handleOpenLearn}>
               Open Learn page
             </button>

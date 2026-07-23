@@ -935,6 +935,24 @@ body,
 
 .group-actions-row {
   margin-bottom: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.leaderboard-practice-actions {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px dashed #94a3b8;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+body.kgpipe-practice-guide.driver-active .leaderboard-practice-actions.driver-active-element {
+  z-index: 10001;
 }
 
 .metric-settings h4 {
@@ -1591,6 +1609,84 @@ body,
   word-break: break-all;
 }
 
+.metric-name {
+  position: relative;
+  display: inline;
+  border-bottom: 1px dotted #94a3b8;
+  cursor: help;
+}
+
+.metric-name-label {
+  font: inherit;
+}
+
+.metric-name-tooltip {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  z-index: 60;
+  width: max-content;
+  max-width: min(320px, 80vw);
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: left;
+  pointer-events: none;
+  transition: opacity 120ms ease, visibility 120ms ease;
+}
+
+.metric-name:hover .metric-name-tooltip,
+.metric-name:focus-within .metric-name-tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+
+.metric-name-tooltip-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.metric-name-tooltip-kind {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.metric-name-tooltip-description {
+  display: block;
+  margin-top: 6px;
+}
+
+.metric-name-tooltip-aliases {
+  display: block;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.metric-name-tooltip-uri {
+  display: block;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  color: #64748b;
+  word-break: break-all;
+}
+
 .results-artifacts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -1675,6 +1771,84 @@ body,
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.results-dataview {
+  display: grid;
+  gap: 14px;
+}
+
+.results-dataview-query {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+}
+
+.results-dataview-textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 4px 0 10px;
+  resize: vertical;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #0f172a;
+  background: #f8fafc;
+}
+
+.results-dataview-targets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.results-dataview-target {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.results-dataview-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.results-dataview-result-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+  min-width: 0;
+}
+
+.results-dataview-table-placeholder {
+  padding: 10px;
+  min-height: 120px;
+}
+
+.results-dataview-result-card .graph-canvas-placeholder {
+  min-height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.results-dataview-result-card .graph-empty-state {
+  text-align: center;
+  max-width: 280px;
+  margin: 0 auto;
+  font-size: 13px;
 }
 
 .tutorial-help {
@@ -1794,6 +1968,46 @@ body,
   max-width: 340px;
   color: #0f172a;
   border-radius: 12px;
+}
+
+/*
+ * driver.js sets inline pointer-events:auto on the overlay path, which can
+ * intercept clicks inside the highlight cutout (e.g. React Flow nodes).
+ * Disable path hit-testing during the practice guide so the active element
+ * remains interactive.
+ */
+body.kgpipe-practice-guide.driver-active .driver-overlay,
+body.kgpipe-practice-guide.driver-active .driver-overlay path {
+  pointer-events: none !important;
+}
+
+/*
+ * driver.js sets `.driver-active * { pointer-events: none }` and only restores
+ * the highlighted element. That fights React Flow's pane/nodes hit-testing.
+ * During the practice guide, keep the builder workspace fully interactive.
+ */
+body.kgpipe-practice-guide.driver-active .app-content,
+body.kgpipe-practice-guide.driver-active .app-content * {
+  pointer-events: auto !important;
+}
+
+body.kgpipe-practice-guide.driver-active .react-flow__nodes {
+  pointer-events: none !important;
+}
+
+body.kgpipe-practice-guide.driver-active .react-flow__node,
+body.kgpipe-practice-guide.driver-active .react-flow__node *,
+body.kgpipe-practice-guide.driver-active .react-flow__handle,
+body.kgpipe-practice-guide.driver-active .react-flow__edge-interaction {
+  pointer-events: all !important;
+}
+
+body.kgpipe-practice-guide.driver-active .react-flow__pane {
+  pointer-events: auto !important;
+}
+
+body.kgpipe-practice-guide.driver-active .driver-active-element {
+  z-index: 10001;
 }
 
 .kgpipe-tutorial-popover .driver-popover-title {
@@ -1937,4 +2151,81 @@ body,
 
 .learn-workflow-card button:hover {
   background: #1d4ed8;
+}
+
+.learn-inspect-card {
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 6%);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 16px;
+}
+
+.learn-inspect-card h4 {
+  margin: 0 0 8px;
+}
+
+.learn-inspect-card p {
+  color: #475569;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 640px;
+}
+
+.learn-inspect-card button {
+  border: 1px solid #2563eb;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.learn-inspect-card button:hover {
+  background: #1d4ed8;
+}
+
+.learn-references {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.learn-references li {
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.learn-reference-kind {
+  color: #64748b;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  min-width: 64px;
+  text-transform: uppercase;
+}
+
+.learn-references a {
+  color: #1d4ed8;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.learn-references a:hover {
+  text-decoration: underline;
 }
