@@ -474,6 +474,85 @@ def get_pipeline_metadata(
 
 
 # ---------------------------------------------------------------------------
+# Metric / measurement metadata (PipeKG)
+# ---------------------------------------------------------------------------
+
+class MeasurementMetadata(BaseModel):
+    """Resolved measurement + parent metric info for UI tooltips."""
+    key: str
+    measurement_name: str
+    unit: str | None = None
+    alias: list[str] = []
+    measurement_uri: str | None = None
+    metric_key: str
+    metric_description: str | None = None
+    metric_type: str | None = None
+
+
+def _build_measurement_catalog() -> dict[str, MeasurementMetadata]:
+    """
+    Index PipeKG measurements by name and alias (case-sensitive first; also
+    lower-cased keys for tolerant lookup).
+    """
+    catalog: dict[str, MeasurementMetadata] = {}
+    try:
+        metrics = PipeKG.find_metric()
+    except Exception:
+        return catalog
+
+    for metric in metrics:
+        try:
+            specs = PipeKG.resolve_measurement_specs(metric.measurements)
+        except Exception:
+            continue
+        for spec in specs:
+            info = MeasurementMetadata(
+                key=spec.name,
+                measurement_name=spec.name,
+                unit=spec.unit,
+                alias=list(spec.alias),
+                measurement_uri=spec.uri,
+                metric_key=metric.name,
+                metric_description=metric.description,
+                metric_type=metric.type,
+            )
+            keys = [spec.name, *spec.alias]
+            for key in keys:
+                if not key:
+                    continue
+                catalog[key] = info.model_copy(update={"key": key})
+                catalog.setdefault(key.lower(), catalog[key])
+    return catalog
+
+
+@app.get("/metrics/metadata")
+def get_metric_metadata(ids: str | None = None) -> dict[str, MeasurementMetadata]:
+    """
+    Return measurement metadata keyed by displayed name / alias.
+
+    Looks up PipeKG MeasurementSpec entities (and parent Metric description)
+    by measurement ``name`` or ``alias_keys``. Pass comma-separated ``ids``
+    (e.g. ``ACC_T,COV_E``); omit to return the full catalog keyed by name+alias.
+    """
+    catalog = _build_measurement_catalog()
+    if not ids:
+        # Prefer canonical keys (skip lower-case duplicates).
+        return {
+            key: value
+            for key, value in catalog.items()
+            if key == value.measurement_name or key in value.alias
+        }
+
+    requested = [item.strip() for item in ids.split(",") if item.strip()]
+    result: dict[str, MeasurementMetadata] = {}
+    for key in requested:
+        hit = catalog.get(key) or catalog.get(key.lower())
+        if hit is not None:
+            result[key] = hit.model_copy(update={"key": key})
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Benchmark runs (fixture catalog)
 # ---------------------------------------------------------------------------
 
