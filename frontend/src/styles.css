@@ -1851,6 +1851,26 @@ body.kgpipe-practice-guide.driver-active .leaderboard-practice-actions.driver-ac
   font-size: 13px;
 }
 
+.metric-definitions-note {
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 8px 0 12px;
+  padding: 9px 10px;
+}
+
+.metric-definitions-note strong {
+  color: #0f172a;
+}
+
+.metric-definitions-note a {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
 .tutorial-help {
   position: fixed;
   right: 20px;

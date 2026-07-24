@@ -12,6 +12,7 @@ import {
 } from "../api";
 import { PipelineName } from "../components/PipelineName";
 import { MetricName } from "../components/MetricName";
+import { MetricDefinitionsNote } from "../components/MetricDefinitionsNote";
 import {
   formatPipelineMetadataTooltip,
   PipelineMetadataProvider,
@@ -868,6 +869,7 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
 
           <div className="metric-settings">
             <h4>Metric Selection</h4>
+            <MetricDefinitionsNote />
             <div className="metric-settings-table-wrap">
               <table className="metric-settings-table">
                 <thead>
@@ -1180,48 +1182,61 @@ export function PipelineLeaderboardPage({ tasks }: PipelineLeaderboardPageProps)
         </aside>
       </section>
 
-      <div className="table-frame">
-        <table className="leaderboard-table">
-          <thead>
-            <tr>
-              {columns.map((columnName) => (
-                <th key={columnName}>
-                  {metricColumns.includes(columnName) ? (
-                    <MetricName id={columnName} />
-                  ) : (
-                    columnName
-                  )}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRows.map((row) => (
-              <tr key={row.key}>
-                {row.values.map((value, idx) => (
-                  <td key={`${row.key}-${columns[idx]}`}>
-                    {columns[idx] === "pipeline" ? <PipelineName id={value} /> : value}
-                  </td>
+      <section className="results-section" data-tutorial="leaderboard-run-data">
+        <div className="results-section-header">
+          <h3>Run Data Table</h3>
+          <span className="muted" style={{ fontSize: 12 }}>
+            Filtered benchmark rows used by the ranking above
+          </span>
+        </div>
+        <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>
+          This table shows the filtered raw run data loaded from the selected benchmark run.
+          Each row represents one pipeline stage, and each metric column is used as input for
+          the ranking schema and preview above.
+        </p>
+        <div className="table-frame">
+          <table className="leaderboard-table">
+            <thead>
+              <tr>
+                {columns.map((columnName) => (
+                  <th key={columnName}>
+                    {metricColumns.includes(columnName) ? (
+                      <MetricName id={columnName} />
+                    ) : (
+                      columnName
+                    )}
+                  </th>
                 ))}
               </tr>
-            ))}
-            {loadingError && (
-              <tr>
-                <td colSpan={Math.max(1, columns.length)} className="empty-cell">
-                  Unable to load runs data: {loadingError}
-                </td>
-              </tr>
-            )}
-            {!loadingError && filteredRows.length === 0 && (
-              <tr>
-                <td colSpan={Math.max(1, columns.length)} className="empty-cell">
-                  No run entries available for selected pipelines.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filteredRows.map((row) => (
+                <tr key={row.key}>
+                  {row.values.map((value, idx) => (
+                    <td key={`${row.key}-${columns[idx]}`}>
+                      {columns[idx] === "pipeline" ? <PipelineName id={value} /> : value}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {loadingError && (
+                <tr>
+                  <td colSpan={Math.max(1, columns.length)} className="empty-cell">
+                    Unable to load runs data: {loadingError}
+                  </td>
+                </tr>
+              )}
+              {!loadingError && filteredRows.length === 0 && (
+                <tr>
+                  <td colSpan={Math.max(1, columns.length)} className="empty-cell">
+                    No run entries available for selected pipelines.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </section>
     </MetricMetadataProvider>
     </PipelineMetadataProvider>
