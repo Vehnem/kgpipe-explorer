@@ -54,6 +54,16 @@ type PipelineBuilderPageProps = {
   tasks: TaskSpec[];
 };
 
+const BUILDER_DRAFT_STORAGE_KEY = "kgpipe-builder-draft";
+
+type BuilderDraft = {
+  version: 1;
+  nodes: AnyNode[];
+  edges: Edge[];
+  search: string;
+  selectedTask: string;
+};
+
 export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
   const [selectedTask, setSelectedTask] = useState<string>("");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -69,6 +79,8 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
   const [inspectedTask, setInspectedTask] = useState<TaskSpec | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [practiceMode, setPracticeMode] = useState(false);
+  const [builderDraftHydrated, setBuilderDraftHydrated] = useState(false);
+  const builderDraftHydratedRef = React.useRef(false);
 
   const configureHandlerRef = React.useRef<(nodeId: string) => void>(() => {});
   configureHandlerRef.current = (nodeId: string) => {
@@ -81,15 +93,53 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
     [nodes]
   );
 
+  const taskByName = useMemo(
+    () => Object.fromEntries(tasks.map((task) => [task.name, task])),
+    [tasks]
+  );
+
   useEffect(() => {
     if (tasks.length === 0) {
-      setSelectedTask("");
       return;
     }
     if (!selectedTask || !tasks.some((task) => task.name === selectedTask)) {
       setSelectedTask(tasks[0].name);
     }
   }, [tasks, selectedTask]);
+
+  useEffect(() => {
+    if (builderDraftHydratedRef.current) return;
+    builderDraftHydratedRef.current = true;
+
+    const draft = readBuilderDraft();
+    if (draft) {
+      setNodes(rehydrateBuilderNodes(draft.nodes, taskByName, configureHandlerRef));
+      setEdges(draft.edges);
+      setSearch(draft.search);
+      setSelectedTask(draft.selectedTask);
+      setSelectedNodeId(null);
+      setSelectedEdgeId(null);
+      setConfiguringNodeId(null);
+      setConnectionError("");
+    }
+    setBuilderDraftHydrated(true);
+  }, [setEdges, setNodes, taskByName]);
+
+  useEffect(() => {
+    if (!builderDraftHydrated) return;
+    writeBuilderDraft({
+      version: 1,
+      nodes: nodes.map(serializeBuilderNode),
+      edges,
+      search,
+      selectedTask
+    });
+  }, [builderDraftHydrated, edges, nodes, search, selectedTask]);
+
+  useEffect(() => {
+    if (!builderDraftHydrated || tasks.length === 0) return;
+    setNodes((current) => rehydrateBuilderNodes(current, taskByName, configureHandlerRef));
+  }, [builderDraftHydrated, setNodes, taskByName, tasks.length]);
 
   useEffect(() => {
     fetchExamplePipelines()
@@ -139,11 +189,6 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
       window.removeEventListener(TUTORIAL_EVENTS.practiceEnded, onPracticeEnded);
     };
   }, [nodes]);
-
-  const taskByName = useMemo(
-    () => Object.fromEntries(tasks.map((task) => [task.name, task])),
-    [tasks]
-  );
 
   function loadExample(exampleId: string) {
     const example = examples.find((e) => e.id === exampleId);
@@ -1291,6 +1336,91 @@ function coerceInputValue(raw: string, datatype: string): ParameterValue {
     return Number.isNaN(parsed) ? 0 : parsed;
   }
   return raw;
+}
+
+function readBuilderDraft(): BuilderDraft | null {
+  try {
+    const raw = window.sessionStorage.getItem(BUILDER_DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<BuilderDraft>;
+    if (
+      parsed.version !== 1 ||
+      !Array.isArray(parsed.nodes) ||
+      !Array.isArray(parsed.edges) ||
+      typeof parsed.search !== "string" ||
+      typeof parsed.selectedTask !== "string"
+    ) {
+      return null;
+    }
+    return parsed as BuilderDraft;
+  } catch {
+    return null;
+  }
+}
+
+function writeBuilderDraft(draft: BuilderDraft): void {
+  try {
+    window.sessionStorage.setItem(BUILDER_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+  } catch {
+    // Draft persistence is best-effort; the editor should keep working if storage is unavailable.
+  }
+}
+
+function serializeBuilderNode(node: AnyNode): AnyNode {
+  if (node.type !== "taskNode") {
+    return { ...node, selected: false } as DataNode;
+  }
+
+  const { onConfigure: _onConfigure, ...data } = node.data as PipelineNodeData;
+  return {
+    ...node,
+    selected: false,
+    data
+  } as PipelineNode;
+}
+
+function rehydrateBuilderNodes(
+  nodes: AnyNode[],
+  taskByName: Record<string, TaskSpec>,
+  configureHandlerRef: React.MutableRefObject<(nodeId: string) => void>
+): AnyNode[] {
+  return nodes.map((node) => {
+    if (node.type !== "taskNode") {
+      return { ...node, selected: false } as DataNode;
+    }
+
+    const data = node.data as PipelineNodeData;
+    const task = taskByName[data.label];
+    const configSpec = task?.config_spec ?? data.configSpec ?? null;
+    const inputPorts = data.inputPorts?.length
+      ? data.inputPorts
+      : task
+        ? portsFromTask(task, "input")
+        : [];
+    const outputPorts = data.outputPorts?.length
+      ? data.outputPorts
+      : task
+        ? portsFromTask(task, "output")
+        : [];
+
+    return {
+      ...node,
+      selected: false,
+      data: {
+        ...data,
+        inputs: inputPorts.map((port) => port.format),
+        outputs: outputPorts.map((port) => port.format),
+        inputPorts,
+        outputPorts,
+        configSpec,
+        parameterValues: {
+          ...defaultParameterValues(configSpec),
+          ...(data.parameterValues ?? {})
+        },
+        onConfigure: () => configureHandlerRef.current(node.id)
+      }
+    } as PipelineNode;
+  });
 }
 
 function countRoots(nodes: Node[], edges: Edge[]): number {
