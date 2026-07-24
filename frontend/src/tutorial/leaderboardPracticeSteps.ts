@@ -29,7 +29,7 @@ export const leaderboardPracticeSteps: TutorialStep[] = [
     }
   },
   {
-    element: '[data-tutorial="leaderboard-practice-actions"]',
+    element: '[data-tutorial="leaderboard-add-accuracy"]',
     title: {
       en: "2. Re-add Accuracy (correctness)",
       de: "2. Accuracy (Correctness) wieder hinzufuegen"
@@ -47,7 +47,7 @@ export const leaderboardPracticeSteps: TutorialStep[] = [
     }
   },
   {
-    element: '[data-tutorial="leaderboard-practice-actions"]',
+    element: '[data-tutorial="leaderboard-add-coverage"]',
     title: {
       en: "3. Re-add Coverage",
       de: "3. Coverage wieder hinzufuegen"
@@ -68,7 +68,7 @@ export const leaderboardPracticeSteps: TutorialStep[] = [
     }
   },
   {
-    element: '[data-tutorial="leaderboard-practice-actions"]',
+    element: '[data-tutorial="leaderboard-restore-metrics"]',
     title: {
       en: "4. Assign metrics to the groups",
       de: "4. Metriken den Gruppen zuordnen"
@@ -92,7 +92,8 @@ export const leaderboardPracticeSteps: TutorialStep[] = [
       en: "Click Distribution in the rank preview. This shows how often each pipeline lands at each rank across weight permutations.",
       de: "Klicke in der Rank-Vorschau auf Distribution. So siehst du, wie oft jede Pipeline bei Gewichtungs-Permutationen auf welchem Rang landet."
     },
-    side: "left",
+    side: "bottom",
+    align: "center",
     deferElement: true,
     advanceOn: {
       event: TUTORIAL_EVENTS.previewModeChanged,

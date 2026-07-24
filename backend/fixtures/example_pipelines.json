@@ -675,7 +675,7 @@
       {
         "source": "n-transform2-rdf-to-csv-v2-0",
         "target": "n-valentine-csv-matching-v2-3",
-        "source_handle": "out:csv1",
+        "source_handle": "out:csv2",
         "target_handle": "in:target",
         "format_label": "csv"
       },
