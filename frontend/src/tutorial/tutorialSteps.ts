@@ -199,6 +199,18 @@ export const tutorialStepsByPage: Record<TutorialPage, TutorialStep[]> = {
         de: "Die Vorschau zeigt, ob eine Pipeline stabil gewinnt oder nur bei bestimmten Gewichtungen. Das hilft, einzelne Scores nicht zu ueberinterpretieren."
       },
       side: "left"
+    },
+    {
+      element: '[data-tutorial="leaderboard-run-data"]',
+      title: {
+        en: "Raw run data",
+        de: "Rohdaten der Runs"
+      },
+      description: {
+        en: "This lower table is the source data behind the ranking. Each row is a pipeline stage, and each metric column contributes to the grouped scores and final rank above. Detailed metric definitions are linked from the KGI-Bench benchmark paper.",
+        de: "Diese untere Tabelle ist die Datengrundlage des Rankings. Jede Zeile ist eine Pipeline-Stage, und jede Metrikspalte fliesst in Gruppenscores und finalen Rang ein. Die detaillierten Metrikdefinitionen sind im KGI-Bench-Benchmark-Paper verlinkt."
+      },
+      side: "top"
     }
   ],
   learn: [

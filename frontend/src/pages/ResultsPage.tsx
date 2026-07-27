@@ -7,6 +7,7 @@ import {
 } from "../api";
 import { PipelineName } from "../components/PipelineName";
 import { MetricName } from "../components/MetricName";
+import { MetricDefinitionsNote } from "../components/MetricDefinitionsNote";
 import { PipelineMetadataProvider } from "../context/PipelineMetadataContext";
 import { MetricMetadataProvider } from "../context/MetricMetadataContext";
 import { emitTutorialEvent, TUTORIAL_EVENTS } from "../tutorial/tutorialEvents";
@@ -729,6 +730,7 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
               </button>
             </div>
           </div>
+          <MetricDefinitionsNote />
 
           {metricsView === "summary" && (
             <>

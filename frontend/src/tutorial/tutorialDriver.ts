@@ -7,8 +7,15 @@ import { emitTutorialEvent, TUTORIAL_EVENTS, type TutorialEventDetail } from "./
 import { tutorialStepsByPage } from "./tutorialSteps";
 import type { TutorialLanguage, TutorialPage, TutorialStep } from "./tutorialTypes";
 
-function toDriveStep(step: TutorialStep, language: TutorialLanguage): DriveStep {
+function toDriveStep(
+  step: TutorialStep,
+  language: TutorialLanguage,
+  options: { isFirstStep?: boolean } = {}
+): DriveStep {
   const waitsForAction = Boolean(step.advanceOn);
+  const actionButtons = options.isFirstStep
+    ? (["close"] as AllowedButtons[])
+    : (["previous", "close"] as AllowedButtons[]);
   return {
     element: step.element,
     popover: {
@@ -18,12 +25,12 @@ function toDriveStep(step: TutorialStep, language: TutorialLanguage): DriveStep 
       align: step.align ?? "center",
       ...(waitsForAction
         ? {
-            showButtons: ["previous", "close"] as AllowedButtons[],
+            showButtons: actionButtons,
             description:
               step.description[language] +
               (language === "en"
-                ? "\n\nComplete this action to continue."
-                : "\n\nFuehre diese Aktion aus, um fortzufahren.")
+                ? "\n\nUse the highlighted action to continue; this step advances automatically."
+                : "\n\nNutze die hervorgehobene Aktion, um fortzufahren; dieser Schritt springt automatisch weiter.")
           }
         : {})
     }
@@ -118,22 +125,68 @@ function advanceAfterAction(activeDriver: Driver, delayMs = 250): void {
   }, delayMs);
 }
 
+function refreshHighlightedElement(activeDriver: Driver, step: TutorialStep): void {
+  if (!step.element) return;
+  const element = document.querySelector(step.element);
+  if (!element) return;
+
+  element.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
+  window.setTimeout(() => {
+    if (activeDriver.isActive()) activeDriver.refresh();
+  }, 80);
+  window.setTimeout(() => {
+    if (activeDriver.isActive()) activeDriver.refresh();
+  }, 300);
+}
+
+function preventPracticeScroll(event: Event): void {
+  event.preventDefault();
+}
+
+function preventPracticeScrollKeys(event: KeyboardEvent): void {
+  const target = event.target as HTMLElement | null;
+  if (target?.closest("button, input, select, textarea, [contenteditable='true']")) {
+    return;
+  }
+  if (
+    ["ArrowDown", "ArrowLeft", "ArrowRight", "ArrowUp", "End", "Home", "PageDown", "PageUp", " "].includes(
+      event.key
+    )
+  ) {
+    event.preventDefault();
+  }
+}
+
+function lockPracticeScroll(): () => void {
+  window.addEventListener("wheel", preventPracticeScroll, { passive: false, capture: true });
+  window.addEventListener("touchmove", preventPracticeScroll, { passive: false, capture: true });
+  window.addEventListener("keydown", preventPracticeScrollKeys, { capture: true });
+
+  return () => {
+    window.removeEventListener("wheel", preventPracticeScroll, { capture: true });
+    window.removeEventListener("touchmove", preventPracticeScroll, { capture: true });
+    window.removeEventListener("keydown", preventPracticeScrollKeys, { capture: true });
+  };
+}
+
 function startPracticeGuide(sourceSteps: TutorialStep[], language: TutorialLanguage): void {
   const steps = sourceSteps.filter((step) => step.deferElement || isVisibleStep(step));
   if (steps.length === 0) return;
 
   let detachActionListener: (() => void) | undefined;
+  const unlockPracticeScroll = lockPracticeScroll();
   document.body.classList.add("kgpipe-practice-guide");
   emitTutorialEvent(TUTORIAL_EVENTS.practiceStarted);
 
   const clearPractice = () => {
+    unlockPracticeScroll();
     document.body.classList.remove("kgpipe-practice-guide");
     emitTutorialEvent(TUTORIAL_EVENTS.practiceEnded);
   };
 
   const tutorial: Driver = driver({
     ...baseDriverConfig(language),
-    steps: steps.map((step) => toDriveStep(step, language)),
+    steps: steps.map((step, index) => toDriveStep(step, language, { isFirstStep: index === 0 })),
     onHighlighted: (_element, _step, { driver: activeDriver }) => {
       detachActionListener?.();
       detachActionListener = undefined;
@@ -142,6 +195,8 @@ function startPracticeGuide(sourceSteps: TutorialStep[], language: TutorialLangu
       if (index === undefined) return;
       const sourceStep = steps[index];
       if (!sourceStep) return;
+
+      refreshHighlightedElement(activeDriver, sourceStep);
 
       if (sourceStep.focusTask) {
         emitTutorialEvent(TUTORIAL_EVENTS.focusTask, { taskName: sourceStep.focusTask });

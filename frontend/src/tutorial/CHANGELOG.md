@@ -8,6 +8,8 @@
 - Added a Leaderboard practice guide ("Practice: rebuild ranking"): clear selection/groups → select R_A/R_B/R_C → add Accuracy + Coverage → assign metrics → Distribution view.
 - Builder practice / export copy remind that pipelines run externally and results must be reimported (see `docs/run-and-reimport.md`).
 - Tutorial steps can declare `advanceOn` event gates; pages emit matching `kgpipe-tutorial:*` window events.
+- Added KGI-Bench benchmark-paper metric definition notes on Results and Leaderboard.
+- Added a labeled Leaderboard "Run Data Table" section and a tutorial step explaining that it is the raw benchmark input behind the ranking.
 
 ## 2026-06-18
 - Added optional, page-specific onboarding tours powered by `driver.js`.
