@@ -206,20 +206,54 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
     emitTutorialEvent(TUTORIAL_EVENTS.exampleLoaded, { exampleId });
   }
 
+  const selectedNode = useMemo(
+    () => (selectedNodeId ? nodes.find((node) => node.id === selectedNodeId) ?? null : null),
+    [nodes, selectedNodeId]
+  );
+
   const filteredTasks = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return tasks;
-    return tasks.filter((task) => {
-      const portHaystack = [
-        ...(task.input_ports ?? []).flatMap((p) => [p.name, p.format]),
-        ...(task.output_ports ?? []).flatMap((p) => [p.name, p.format])
-      ];
-      const haystack = [task.name, task.inputs.join(" "), task.outputs.join(" "), ...portHaystack]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [search, tasks]);
+    const searched = !q
+      ? tasks
+      : tasks.filter((task) => {
+          const portHaystack = [
+            ...(task.input_ports ?? []).flatMap((p) => [p.name, p.format]),
+            ...(task.output_ports ?? []).flatMap((p) => [p.name, p.format])
+          ];
+          const haystack = [task.name, task.inputs.join(" "), task.outputs.join(" "), ...portHaystack]
+            .join(" ")
+            .toLowerCase();
+          return haystack.includes(q);
+        });
+
+    if (!selectedNode) {
+      return searched.map((task) => ({ task, compat: null as CompatKind | null }));
+    }
+
+    const { inputs, outputs } = getNodeIoFormats(selectedNode);
+    const downstream: TaskSpec[] = [];
+    const upstream: TaskSpec[] = [];
+
+    for (const task of searched) {
+      const taskInputs = portsFromTask(task, "input").map((p) => p.format);
+      const taskOutputs = portsFromTask(task, "output").map((p) => p.format);
+      const canFollow =
+        outputs.length > 0 && portFormatsCompatible(outputs, taskInputs);
+      const canPrecede =
+        inputs.length > 0 && portFormatsCompatible(taskOutputs, inputs);
+
+      if (canFollow) {
+        downstream.push(task);
+      } else if (canPrecede) {
+        upstream.push(task);
+      }
+    }
+
+    return [
+      ...downstream.map((task) => ({ task, compat: "downstream" as const })),
+      ...upstream.map((task) => ({ task, compat: "upstream" as const }))
+    ];
+  }, [search, tasks, selectedNode]);
 
   const visibleTasks = useMemo(() => filteredTasks.slice(0, 30), [filteredTasks]);
 
@@ -548,79 +582,96 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           onChange={(e) => setSearch(e.target.value)}
         />
         <div className="builder-task-list-meta">
-          {filteredTasks.length} task{filteredTasks.length !== 1 ? "s" : ""}
+          {selectedNode
+            ? `${filteredTasks.length} compatible task${filteredTasks.length !== 1 ? "s" : ""}`
+            : `${filteredTasks.length} task${filteredTasks.length !== 1 ? "s" : ""}`}
           {filteredTasks.length > 30 ? " (showing first 30)" : ""}
+          {selectedNode ? " for selected node" : ""}
           {" — click to inspect, "}
           <strong>+</strong>
           {" to add"}
         </div>
         <div className="task-item-list" data-tutorial="builder-task-list">
-          {visibleTasks.map((task) => {
+          {visibleTasks.length === 0 && selectedNode ? (
+            <p className="builder-task-list-empty muted">No tasks match this node&apos;s formats.</p>
+          ) : null}
+          {visibleTasks.map(({ task, compat }, index) => {
             const inputPorts = portsFromTask(task, "input");
             const outputPorts = portsFromTask(task, "output");
+            const prevCompat = index > 0 ? visibleTasks[index - 1].compat : null;
+            const showSection =
+              compat !== null && (index === 0 || compat !== prevCompat);
             return (
-              <div
-                key={task.name}
-                className={`task-list-item${task.name === selectedTask ? " selected" : ""}`}
-                data-tutorial-task={task.name}
-                onClick={() => {
-                  setSelectedTask(task.name);
-                  setInspectedTask(task);
-                }}
-              >
-                <div className="task-list-item-main">
-                  <span className="task-list-item-name" title={task.name}>
-                    {task.name}
-                  </span>
-                  <div className="task-list-item-io">
-                    {inputPorts.map((port) => (
-                      <span
-                        key={`in-${port.name}`}
-                        className="fmt-badge"
-                        title={port.name !== port.format ? port.name : undefined}
-                        style={{
-                          backgroundColor: `${formatColor(port.format)}1f`,
-                          borderColor: formatColor(port.format),
-                          color: formatColor(port.format)
-                        }}
-                      >
-                        {port.format}
-                      </span>
-                    ))}
-                    {inputPorts.length > 0 && outputPorts.length > 0 && (
-                      <span className="task-list-io-arrow">→</span>
-                    )}
-                    {outputPorts.map((port) => (
-                      <span
-                        key={`out-${port.name}`}
-                        className="fmt-badge"
-                        title={port.name !== port.format ? port.name : undefined}
-                        style={{
-                          backgroundColor: `${formatColor(port.format)}1f`,
-                          borderColor: formatColor(port.format),
-                          color: formatColor(port.format)
-                        }}
-                      >
-                        {port.format}
-                      </span>
-                    ))}
-                    {inputPorts.length === 0 && outputPorts.length === 0 && (
-                      <span className="muted" style={{ fontSize: 10 }}>no IO declared</span>
-                    )}
+              <React.Fragment key={task.name}>
+                {showSection ? (
+                  <div className="task-list-section">
+                    {compat === "downstream"
+                      ? "Can follow selected"
+                      : "Can precede selected"}
                   </div>
-                </div>
-                <button
-                  type="button"
-                  className="task-list-add-btn"
-                  title={`Add ${task.name} to canvas`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    addNode(task.name);
+                ) : null}
+                <div
+                  className={`task-list-item${task.name === selectedTask ? " selected" : ""}`}
+                  data-tutorial-task={task.name}
+                  onClick={() => {
+                    setSelectedTask(task.name);
+                    setInspectedTask(task);
                   }}
                 >
-                  +
-                </button>
-              </div>
+                  <div className="task-list-item-main">
+                    <span className="task-list-item-name" title={task.name}>
+                      {task.name}
+                    </span>
+                    <div className="task-list-item-io">
+                      {inputPorts.map((port) => (
+                        <span
+                          key={`in-${port.name}`}
+                          className="fmt-badge"
+                          title={port.name !== port.format ? port.name : undefined}
+                          style={{
+                            backgroundColor: `${formatColor(port.format)}1f`,
+                            borderColor: formatColor(port.format),
+                            color: formatColor(port.format)
+                          }}
+                        >
+                          {port.format}
+                        </span>
+                      ))}
+                      {inputPorts.length > 0 && outputPorts.length > 0 && (
+                        <span className="task-list-io-arrow">→</span>
+                      )}
+                      {outputPorts.map((port) => (
+                        <span
+                          key={`out-${port.name}`}
+                          className="fmt-badge"
+                          title={port.name !== port.format ? port.name : undefined}
+                          style={{
+                            backgroundColor: `${formatColor(port.format)}1f`,
+                            borderColor: formatColor(port.format),
+                            color: formatColor(port.format)
+                          }}
+                        >
+                          {port.format}
+                        </span>
+                      ))}
+                      {inputPorts.length === 0 && outputPorts.length === 0 && (
+                        <span className="muted" style={{ fontSize: 10 }}>no IO declared</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="task-list-add-btn"
+                    title={`Add ${task.name} to canvas`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addNode(task.name);
+                    }}
+                  >
+                    +
+                  </button>
+                </div>
+              </React.Fragment>
             );
           })}
         </div>
@@ -1307,10 +1358,39 @@ function countLeaves(nodes: Node[], edges: Edge[]): number {
   return [...outgoing.values()].filter((count) => count === 0).length;
 }
 
+type CompatKind = "downstream" | "upstream";
+
 function normalizeFormat(value: string): string {
   const normalized = value.trim().toLowerCase();
   if (!normalized) return "";
   return normalized.startsWith(".") ? normalized.slice(1) : normalized;
+}
+
+function formatsCompatible(sourceFormat: string, targetFormat: string): boolean {
+  const source = normalizeFormat(sourceFormat);
+  const target = normalizeFormat(targetFormat);
+  return source === target || source === "any" || target === "any";
+}
+
+function portFormatsCompatible(sourceFormats: string[], targetFormats: string[]): boolean {
+  return sourceFormats.some((source) =>
+    targetFormats.some((target) => formatsCompatible(source, target))
+  );
+}
+
+function getNodeIoFormats(node: AnyNode): { inputs: string[]; outputs: string[] } {
+  if (node.type === "dataNode") {
+    const data = node.data as DataNodeData;
+    if (data.dataKind === "source") {
+      return { inputs: [], outputs: [normalizeFormat(data.format)].filter(Boolean) };
+    }
+    return { inputs: ["any"], outputs: [] };
+  }
+  const data = node.data as PipelineNodeData;
+  return {
+    inputs: data.inputPorts.map((p) => p.format).filter(Boolean),
+    outputs: data.outputPorts.map((p) => p.format).filter(Boolean)
+  };
 }
 
 function synthesizePortsFromFormats(formats: string[]): DataPortSpec[] {

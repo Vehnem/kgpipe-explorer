@@ -172,12 +172,26 @@ body,
   margin-bottom: 8px;
 }
 
+.builder-task-list-empty {
+  margin: 4px 0 8px;
+  font-size: 12px;
+}
+
 .task-item-list {
   display: grid;
   gap: 4px;
   max-height: 340px;
   overflow-y: auto;
   padding-right: 2px;
+}
+
+.task-list-section {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #64748b;
+  padding: 6px 2px 2px;
 }
 
 .task-list-item {
