@@ -1,5 +1,23 @@
 {
   "default_run_id": "kgi-bench-movie",
+  "results_base": "data/results/large",
+  "pipeline_aliases": {
+    "R_A": "rdf_a",
+    "R_B": "rdf_b",
+    "R_C": "rdf_llm_schema_align_v1",
+    "J_A": "json_a",
+    "J_B": "json_b",
+    "J_C": "json_llm",
+    "T_A": "text_a",
+    "T_B": "text_b",
+    "T_C": "text_llm_triple_extract_v1",
+    "JRT": "json_rdf_text",
+    "JTR": "json_text_rdf",
+    "RJT": "rdf_json_text",
+    "RTJ": "rdf_text_json",
+    "TJR": "text_json_rdf",
+    "TRJ": "text_rdf_json"
+  },
   "runs": [
     {
       "id": "kgi-bench-movie",

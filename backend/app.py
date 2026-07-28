@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import logging
 from pathlib import Path
 from typing import List, Optional
 
@@ -9,9 +10,12 @@ import hashlib
 import sqlite3
 from datetime import datetime, timezone
 
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from rdflib import BNode, Graph, Literal, URIRef
+from rdflib.query import Result as SparqlResult
 
 from fixtures_loader import get_fixtures, load_fixtures
 from kgpipe.common.graph.definitions import ImplementationEntity
@@ -73,6 +77,25 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="KGpipe Explorer API", version="0.1.0", lifespan=lifespan)
 
+APP_LOG_PATH = Path(__file__).resolve().parent / "app.log"
+REQUEST_LOGGER = logging.getLogger("kgpipe_explorer.requests")
+
+if not REQUEST_LOGGER.handlers:
+    REQUEST_LOGGER.setLevel(logging.INFO)
+    REQUEST_LOGGER.propagate = False
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    )
+
+    file_handler = logging.FileHandler(APP_LOG_PATH, encoding="utf-8")
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    )
+    REQUEST_LOGGER.addHandler(stream_handler)
+    REQUEST_LOGGER.addHandler(file_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "https://vehnem.github.io"],
@@ -80,6 +103,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    response = await call_next(request)
+    client = request.client.host if request.client else "unknown"
+    REQUEST_LOGGER.info(
+        "%s %s -> %s client=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        client,
+    )
+    return response
 
 
 def _default_benchmark_run_id() -> str:
@@ -727,26 +764,164 @@ def get_leaderboard_defaults() -> LeaderboardDefaults:
 # Results / artifacts
 # ---------------------------------------------------------------------------
 
+BACKEND_ROOT = Path(__file__).resolve().parent
+
+_STAGE_META_FILES: dict[str, tuple[str, str]] = {
+    "exec-plan.json": ("Pipeline execution plan", "application/json"),
+    "exec-report.json": ("Task execution report", "application/json"),
+    "eval_results.json": ("Stage evaluation metrics", "application/json"),
+}
+
+_STAGE_KG_FILES: dict[str, tuple[str, str]] = {
+    "result.nt": ("Stage output knowledge graph", "application/n-triples"),
+    "result_eval.nt": ("Evaluation subgraph", "application/n-triples"),
+}
+
+_TMP_MIME_BY_SUFFIX: dict[str, str] = {
+    ".json": "application/json",
+    ".nt": "application/n-triples",
+    ".csv": "text/csv",
+    ".tsv": "text/tab-separated-values",
+    ".txt": "text/plain",
+    ".prov": "text/plain",
+    ".ttl": "text/turtle",
+}
+
+
 class ArtifactFile(BaseModel):
     name: str
     description: str
     mime_type: str
     size_bytes: int
     path: str
+    category: str = "file"
 
 
-def _seed(pipeline: str, stage: str, salt: str = "") -> int:
-    """Deterministic seed from (pipeline, stage, salt) for mock size variation."""
-    digest = hashlib.md5(f"{pipeline}|{stage}|{salt}".encode()).digest()
-    return int.from_bytes(digest[:4], "big")
+class StageArtifacts(BaseModel):
+    files: list[ArtifactFile]
+    tmp_count: int = 0
 
 
-def _vary(base: int, pipeline: str, stage: str, salt: str = "", spread: int = 0) -> int:
-    """Return *base* ± spread, deterministically varied by the inputs."""
-    if spread == 0:
-        return base
-    offset = (_seed(pipeline, stage, salt) % (2 * spread + 1)) - spread
-    return base + offset
+def _results_root() -> Path:
+    rel = str(get_fixtures().benchmarks.get("results_base", "data/results/large"))
+    return (BACKEND_ROOT / rel).resolve()
+
+
+def _pipeline_results_alias(pipeline_id: str) -> str | None:
+    aliases = get_fixtures().benchmarks.get("pipeline_aliases", {})
+    if not isinstance(aliases, dict):
+        return None
+    alias = aliases.get(pipeline_id)
+    return str(alias).strip() if alias else None
+
+
+def _guess_mime_type(filename: str) -> str:
+    suffix = Path(filename).suffix.lower()
+    if suffix in _TMP_MIME_BY_SUFFIX:
+        return _TMP_MIME_BY_SUFFIX[suffix]
+    return "application/octet-stream"
+
+
+def _artifact_file(
+    path: Path,
+    *,
+    display_path: str,
+    description: str,
+    mime_type: str,
+    category: str,
+) -> ArtifactFile:
+    return ArtifactFile(
+        name=path.name,
+        description=description,
+        mime_type=mime_type,
+        size_bytes=path.stat().st_size,
+        path=display_path,
+        category=category,
+    )
+
+
+def _scan_stage_meta_and_kg(stage_dir: Path, rel_prefix: str) -> list[ArtifactFile]:
+    files: list[ArtifactFile] = []
+    for filename, (description, mime_type) in _STAGE_META_FILES.items():
+        path = stage_dir / filename
+        if path.is_file():
+            files.append(
+                _artifact_file(
+                    path,
+                    display_path=f"{rel_prefix}/{filename}",
+                    description=description,
+                    mime_type=mime_type,
+                    category="meta",
+                )
+            )
+    for filename, (description, mime_type) in _STAGE_KG_FILES.items():
+        path = stage_dir / filename
+        if path.is_file():
+            files.append(
+                _artifact_file(
+                    path,
+                    display_path=f"{rel_prefix}/{filename}",
+                    description=description,
+                    mime_type=mime_type,
+                    category="kg",
+                )
+            )
+    return files
+
+
+def _count_tmp_files(tmp_dir: Path) -> int:
+    if not tmp_dir.is_dir():
+        return 0
+    return sum(1 for path in tmp_dir.rglob("*") if path.is_file())
+
+
+def _list_tmp_files(tmp_dir: Path, rel_prefix: str) -> list[ArtifactFile]:
+    if not tmp_dir.is_dir():
+        return []
+    files: list[ArtifactFile] = []
+    for path in sorted(tmp_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(tmp_dir).as_posix()
+        files.append(
+            _artifact_file(
+                path,
+                display_path=f"{rel_prefix}/tmp/{rel}",
+                description="Intermediate task output",
+                mime_type=_guess_mime_type(path.name),
+                category="tmp",
+            )
+        )
+    return files
+
+
+def _resolve_stage_dir(pipeline_id: str, stage_id: str) -> tuple[Path, str] | None:
+    alias = _pipeline_results_alias(pipeline_id)
+    if not alias:
+        return None
+    rel_prefix = f"{alias}/{stage_id}"
+    stage_dir = _results_root() / alias / stage_id
+    if not stage_dir.is_dir():
+        return None
+    return stage_dir, rel_prefix
+
+
+def _build_real_artifacts(
+    pipeline_stages: dict[str, list[str]],
+) -> dict[str, dict[str, StageArtifacts]]:
+    result: dict[str, dict[str, StageArtifacts]] = {}
+    for pipeline, stages in pipeline_stages.items():
+        result[pipeline] = {}
+        for stage in stages:
+            resolved = _resolve_stage_dir(pipeline, stage)
+            if resolved is None:
+                result[pipeline][stage] = StageArtifacts(files=[], tmp_count=0)
+                continue
+            stage_dir, rel_prefix = resolved
+            files = _scan_stage_meta_and_kg(stage_dir, rel_prefix)
+            tmp_count = _count_tmp_files(stage_dir / "tmp")
+            result[pipeline][stage] = StageArtifacts(files=files, tmp_count=tmp_count)
+    return result
 
 
 def _read_pipeline_stages(run_id: str | None = None) -> dict[str, list[str]]:
@@ -771,46 +946,209 @@ def _read_pipeline_stages(run_id: str | None = None) -> dict[str, list[str]]:
     return seen
 
 
-def _build_mock_artifacts(
-    pipeline_stages: dict[str, list[str]],
-) -> dict[str, dict[str, list[ArtifactFile]]]:
-    """
-    Generate deterministic mock artifact listings for every (pipeline, stage)
-    combination present in the runs data.
-    """
-    stage_artifacts = get_fixtures().stage_artifacts
-    result: dict[str, dict[str, list[ArtifactFile]]] = {}
-    for pipeline, stages in pipeline_stages.items():
-        result[pipeline] = {}
-        for stage in stages:
-            templates = stage_artifacts.get(stage, [])
-            files: list[ArtifactFile] = []
-            for tpl in templates:
-                size = _vary(
-                    tpl["base_size"], pipeline, stage, tpl["name"], tpl["spread"]
-                )
-                files.append(
-                    ArtifactFile(
-                        name=tpl["name"],
-                        description=tpl["description"],
-                        mime_type=tpl["mime_type"],
-                        size_bytes=size,
-                        path=f"runs/{pipeline}/{stage}/{tpl['name']}",
-                    )
-                )
-            result[pipeline][stage] = files
-    return result
-
-
 @app.get("/results/artifacts")
 def get_results_artifacts(
     run_id: str | None = None,
-) -> dict[str, dict[str, list[ArtifactFile]]]:
+) -> dict[str, dict[str, StageArtifacts]]:
     """
-    Mock endpoint — returns deterministic artifact file listings for every
-    (pipeline, stage) combination in the selected benchmark run.
+    Return artifact listings for every (pipeline, stage) in the benchmark run.
 
-    Shape: { pipeline_id: { stage_id: [ArtifactFile, …] } }
+    Meta files (plan, report, eval) and KG outputs are listed per stage.
+    Intermediate ``tmp/`` files are counted but not listed — use
+    ``GET /results/artifacts/tmp`` to fetch them on demand.
+
+    Shape: { pipeline_id: { stage_id: StageArtifacts } }
     """
     pipeline_stages = _read_pipeline_stages(run_id)
-    return _build_mock_artifacts(pipeline_stages)
+    return _build_real_artifacts(pipeline_stages)
+
+
+@app.get("/results/artifacts/tmp")
+def get_results_tmp_artifacts(
+    pipeline: str,
+    stage: str,
+    run_id: str | None = None,
+) -> list[ArtifactFile]:
+    """Lazy listing of intermediate task outputs under a stage's ``tmp/`` directory."""
+    del run_id  # reserved for per-run results roots in the future
+    pipeline = pipeline.strip()
+    stage = stage.strip()
+    if not pipeline or not stage:
+        raise HTTPException(status_code=400, detail="pipeline and stage are required")
+
+    resolved = _resolve_stage_dir(pipeline, stage)
+    if resolved is None:
+        return []
+    stage_dir, rel_prefix = resolved
+    return _list_tmp_files(stage_dir / "tmp", rel_prefix)
+
+
+def _resolve_final_kg_path(pipeline_id: str) -> tuple[Path, str, str] | None:
+    """Return ``(absolute_path, display_path, stage_id)`` for a pipeline's final ``result.nt``."""
+    alias = _pipeline_results_alias(pipeline_id)
+    if not alias:
+        return None
+    pipeline_root = _results_root() / alias
+    if not pipeline_root.is_dir():
+        return None
+
+    stage_dirs = sorted(
+        (
+            path
+            for path in pipeline_root.iterdir()
+            if path.is_dir() and path.name.startswith("stage_")
+        ),
+        key=lambda path: int(path.name.rsplit("_", 1)[-1])
+        if path.name.rsplit("_", 1)[-1].isdigit()
+        else 0,
+    )
+    for stage_dir in reversed(stage_dirs):
+        result_nt = stage_dir / "result.nt"
+        if result_nt.is_file():
+            rel_prefix = f"{alias}/{stage_dir.name}"
+            return result_nt, f"{rel_prefix}/result.nt", stage_dir.name
+    return None
+
+
+def _term_to_sparql_json(term: object) -> dict[str, str]:
+    if isinstance(term, URIRef):
+        return {"type": "uri", "value": str(term)}
+    if isinstance(term, BNode):
+        return {"type": "bnode", "value": str(term)}
+    if isinstance(term, Literal):
+        binding: dict[str, str] = {"type": "literal", "value": str(term)}
+        if term.language:
+            binding["xml:lang"] = term.language
+        if term.datatype:
+            binding["datatype"] = str(term.datatype)
+        return binding
+    return {"type": "literal", "value": str(term)}
+
+
+def _sparql_result_to_json(result: object) -> dict[str, object]:
+    """Normalize rdflib query output to SPARQL Results JSON."""
+    if isinstance(result, Graph):
+        bindings = [
+            {
+                "s": _term_to_sparql_json(s),
+                "p": _term_to_sparql_json(p),
+                "o": _term_to_sparql_json(o),
+            }
+            for s, p, o in result
+        ]
+        return {"head": {"vars": ["s", "p", "o"]}, "results": {"bindings": bindings}}
+
+    if isinstance(result, SparqlResult):
+        if result.type in {"CONSTRUCT", "DESCRIBE"} and result.graph is not None:
+            bindings = [
+                {
+                    "s": _term_to_sparql_json(s),
+                    "p": _term_to_sparql_json(p),
+                    "o": _term_to_sparql_json(o),
+                }
+                for s, p, o in result.graph
+            ]
+            return {"head": {"vars": ["s", "p", "o"]}, "results": {"bindings": bindings}}
+
+        if result.type == "ASK":
+            return {
+                "head": {"vars": []},
+                "boolean": bool(result.askAnswer),
+                "results": {"bindings": []},
+            }
+
+        variables = [str(var) for var in (result.vars or [])]
+        bindings: list[dict[str, dict[str, str]]] = []
+        for row in result:
+            binding: dict[str, dict[str, str]] = {}
+            for var in variables:
+                value = row[var]
+                if value is not None:
+                    binding[var] = _term_to_sparql_json(value)
+            bindings.append(binding)
+        return {"head": {"vars": variables}, "results": {"bindings": bindings}}
+
+    bindings: list[dict[str, dict[str, str]]] = []
+    for row in result:  # type: ignore[union-attr]
+        if isinstance(row, tuple) and len(row) == 3:
+            s, p, o = row
+            bindings.append(
+                {
+                    "s": _term_to_sparql_json(s),
+                    "p": _term_to_sparql_json(p),
+                    "o": _term_to_sparql_json(o),
+                }
+            )
+    return {"head": {"vars": ["s", "p", "o"]}, "results": {"bindings": bindings}}
+
+
+def _execute_sparql_on_nt(kg_path: Path, query: str) -> dict[str, object]:
+    graph = Graph()
+    graph.parse(kg_path, format="nt")
+    result = graph.query(query)
+    return _sparql_result_to_json(result)
+
+
+class DataViewQueryRequest(BaseModel):
+    query: str
+    pipelines: list[str] = Field(default_factory=list)
+    run_id: str | None = None
+
+
+class DataViewPipelineResult(BaseModel):
+    pipeline: str
+    stage: str | None = None
+    kg_path: str | None = None
+    error: str | None = None
+    result: dict[str, object] | None = None
+
+
+@app.post("/results/dataview/query", response_model=list[DataViewPipelineResult])
+def query_pipeline_kgs(request: DataViewQueryRequest) -> list[DataViewPipelineResult]:
+    """Execute the same SPARQL query against each pipeline's final ``result.nt`` KG."""
+    del request.run_id  # reserved for per-run results roots in the future
+    query = request.query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="query must not be empty")
+
+    pipelines = [pipeline.strip() for pipeline in request.pipelines if pipeline.strip()]
+    if not pipelines:
+        raise HTTPException(status_code=400, detail="at least one pipeline is required")
+    if len(pipelines) > 2:
+        raise HTTPException(status_code=400, detail="at most two pipelines are supported")
+
+    results: list[DataViewPipelineResult] = []
+    for pipeline in pipelines:
+        resolved = _resolve_final_kg_path(pipeline)
+        if resolved is None:
+            results.append(
+                DataViewPipelineResult(
+                    pipeline=pipeline,
+                    error="Final result.nt not found for this pipeline.",
+                )
+            )
+            continue
+
+        kg_path, display_path, stage = resolved
+        try:
+            sparql_json = _execute_sparql_on_nt(kg_path, query)
+        except Exception as exc:  # noqa: BLE001 - surface rdflib parse/query errors to UI
+            results.append(
+                DataViewPipelineResult(
+                    pipeline=pipeline,
+                    stage=stage,
+                    kg_path=display_path,
+                    error=str(exc),
+                )
+            )
+            continue
+
+        results.append(
+            DataViewPipelineResult(
+                pipeline=pipeline,
+                stage=stage,
+                kg_path=display_path,
+                result=sparql_json,
+            )
+        )
+    return results

@@ -5,15 +5,19 @@
   },
   {
     "label": "All task implementations",
-    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>\nCONSTRUCT { ?impl ?p ?o }\nWHERE {\n  ?impl a kgo:Implementation ;\n        ?p ?o .\n} LIMIT 60"
+    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/>\nCONSTRUCT { ?impl ?p ?o }\nWHERE {\n  ?impl a kgo:Implementation ;\n        ?p ?o .\n} LIMIT 60"
+  },
+  {
+    "label": "All pipelines with steps",
+    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/>\nCONSTRUCT {\n  ?pipeline ?p ?o .\n  ?step ?sp ?so .\n}\nWHERE {\n  ?pipeline a kgo:Pipeline ;\n            ?p ?o .\n  OPTIONAL {\n    ?pipeline kgo:hasStep ?step .\n    ?step ?sp ?so .\n  }\n} LIMIT 120"
   },
   {
     "label": "Tasks and their tools",
-    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>\nPREFIX kgr: <http://github.com/ScaDS/kgpipe/resource/>\nCONSTRUCT { ?impl kgo:usesTool ?tool }\nWHERE {\n  ?impl a kgo:Implementation ;\n        kgo:usesTool ?tool .\n} LIMIT 80"
+    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/>\nPREFIX kgr: <http://github.com/ScaDS/kgpipe/resource/>\nCONSTRUCT { ?impl kgo:usesTool ?tool }\nWHERE {\n  ?impl a kgo:Implementation ;\n        kgo:usesTool ?tool .\n} LIMIT 80"
   },
   {
     "label": "Tasks and their implemented methods",
-    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>\nCONSTRUCT { ?impl kgo:implementsMethod ?method }\nWHERE {\n  ?impl a kgo:Implementation ;\n        kgo:implementsMethod ?method .\n} LIMIT 80"
+    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/>\nCONSTRUCT { ?impl kgo:implementsMethod ?method }\nWHERE {\n  ?impl a kgo:Implementation ;\n        kgo:implementsMethod ?method .\n} LIMIT 80"
   },
   {
     "label": "Tasks and their parameters",
@@ -21,10 +25,10 @@
   },
   {
     "label": "Tasks with inputs and outputs",
-    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>\nCONSTRUCT { ?impl ?rel ?format }\nWHERE {\n  ?impl a kgo:Implementation .\n  { ?impl kgo:hasInput ?format . BIND(kgo:hasInput AS ?rel) }\n  UNION\n  { ?impl kgo:hasOutput ?format . BIND(kgo:hasOutput AS ?rel) }\n} LIMIT 100"
+    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/>\nCONSTRUCT { ?impl ?rel ?format }\nWHERE {\n  ?impl a kgo:Implementation .\n  { ?impl kgo:input ?format . BIND(kgo:input AS ?rel) }\n  UNION\n  { ?impl kgo:output ?format . BIND(kgo:output AS ?rel) }\n} LIMIT 100"
   },
   {
     "label": "Full neighbourhood of one task (limit 1)",
-    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/ontology/>\nCONSTRUCT { ?impl ?p ?o }\nWHERE {\n  ?impl a kgo:Implementation ; ?p ?o .\n} LIMIT 30"
+    "query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/>\nCONSTRUCT { ?impl ?p ?o }\nWHERE {\n  ?impl a kgo:Implementation ; ?p ?o .\n} LIMIT 30"
   }
 ]

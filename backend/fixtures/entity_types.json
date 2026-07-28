@@ -1,19 +1,24 @@
 {
   "types": [
     {
-      "id": "http://github.com/ScaDS/kgpipe/ontology/Task",
+      "id": "http://github.com/ScaDS/kgpipe/Task",
       "label": "Tasks",
       "prefixed": "kgo:Task"
     },
     {
-      "id": "http://github.com/ScaDS/kgpipe/ontology/TaskRun",
+      "id": "http://github.com/ScaDS/kgpipe/TaskRun",
       "label": "Task Runs",
       "prefixed": "kgo:TaskRun"
     },
     {
-      "id": "http://github.com/ScaDS/kgpipe/ontology/Implementation",
+      "id": "http://github.com/ScaDS/kgpipe/Implementation",
       "label": "Implementations",
       "prefixed": "kgo:Implementation"
+    },
+    {
+      "id": "http://github.com/ScaDS/kgpipe/Pipeline",
+      "label": "Pipelines",
+      "prefixed": "kgo:Pipeline"
     },
     {
       "id": "http://github.com/ScaDS/kgpipe/ConfigSpec",
@@ -41,5 +46,5 @@
       "prefixed": "kgo:MeasurementSpec"
     }
   ],
-  "discovery_query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/>\nPREFIX kgoo: <http://github.com/ScaDS/kgpipe/ontology/>\nPREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nCONSTRUCT {\n  ?entity a ?type .\n  ?entity rdfs:label ?label .\n}\nWHERE {\n  VALUES ?type {\n    kgoo:Task\n    kgoo:TaskRun\n    kgoo:Implementation\n    kgo:ConfigSpec\n    kgo:Parameter\n    kgo:Metric\n    kgo:MetricRun\n    kgo:MeasurementSpec\n  }\n  ?entity a ?type .\n  OPTIONAL { ?entity rdfs:label ?label . }\n}"
+  "discovery_query": "PREFIX kgo: <http://github.com/ScaDS/kgpipe/>\nPREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nCONSTRUCT {\n  ?entity a ?type .\n  ?entity rdfs:label ?label .\n}\nWHERE {\n  VALUES ?type {\n    kgo:Task\n    kgo:TaskRun\n    kgo:Implementation\n    kgo:Pipeline\n    kgo:ConfigSpec\n    kgo:Parameter\n    kgo:Metric\n    kgo:MetricRun\n    kgo:MeasurementSpec\n  }\n  ?entity a ?type .\n  OPTIONAL { ?entity rdfs:label ?rdfsLabel . }\n  OPTIONAL { ?entity kgo:name ?name . }\n  BIND(COALESCE(?rdfsLabel, ?name) AS ?label)\n}"
 }
