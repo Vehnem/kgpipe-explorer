@@ -75,6 +75,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   const [examples, setExamples] = useState<ExamplePipeline[]>([]);
+  const [selectedExampleId, setSelectedExampleId] = useState("");
   const [dataElements, setDataElements] = useState<DataElement[]>([]);
   const [inspectedTask, setInspectedTask] = useState<TaskSpec | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -244,6 +245,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
 
     setNodes(newNodes);
     setEdges(newEdges);
+    setSelectedExampleId(exampleId);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setConfiguringNodeId(null);
@@ -258,18 +260,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
 
   const filteredTasks = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const searched = !q
-      ? tasks
-      : tasks.filter((task) => {
-          const portHaystack = [
-            ...(task.input_ports ?? []).flatMap((p) => [p.name, p.format]),
-            ...(task.output_ports ?? []).flatMap((p) => [p.name, p.format])
-          ];
-          const haystack = [task.name, task.inputs.join(" "), task.outputs.join(" "), ...portHaystack]
-            .join(" ")
-            .toLowerCase();
-          return haystack.includes(q);
-        });
+    const searched = !q ? tasks : tasks.filter((task) => taskMatchesSearch(task, q));
 
     if (!selectedNode) {
       return searched.map((task) => ({ task, compat: null as CompatKind | null }));
@@ -576,10 +567,9 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
             <label htmlFor="example-select">Load example pipeline</label>
             <select
               id="example-select"
-              defaultValue=""
+              value={selectedExampleId}
               onChange={(e) => {
                 if (e.target.value) loadExample(e.target.value);
-                e.target.value = "";
               }}
             >
               <option value="" disabled>
@@ -623,7 +613,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           data-tutorial="builder-task-search"
           type="text"
           value={search}
-          placeholder="Search by name, input, output..."
+          placeholder="Search by name, task type, input, output..."
           onChange={(e) => setSearch(e.target.value)}
         />
         <div className="builder-task-list-meta">
@@ -643,6 +633,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           {visibleTasks.map(({ task, compat }, index) => {
             const inputPorts = portsFromTask(task, "input");
             const outputPorts = portsFromTask(task, "output");
+            const typeTags = taskTypeTags(task);
             const prevCompat = index > 0 ? visibleTasks[index - 1].compat : null;
             const showSection =
               compat !== null && (index === 0 || compat !== prevCompat);
@@ -667,6 +658,24 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
                     <span className="task-list-item-name" title={task.name}>
                       {task.name}
                     </span>
+                    {typeTags.length > 0 && (
+                      <div className="task-list-item-types">
+                        {typeTags.map((type) => (
+                          <span
+                            key={type}
+                            className="task-type-badge"
+                            title={`Task type: ${type}`}
+                            style={{
+                              backgroundColor: `${taskTypeColor(type)}1a`,
+                              borderColor: taskTypeColor(type),
+                              color: taskTypeColor(type)
+                            }}
+                          >
+                            {type}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <div className="task-list-item-io">
                       {inputPorts.map((port) => (
                         <span
@@ -1593,6 +1602,63 @@ function resolveHandleFormat(
   const ports = expectedKind === "in" ? data.inputPorts : data.outputPorts;
   const port = ports.find((p) => p.name === portName);
   return port ? port.format : null;
+}
+
+function taskTypeTags(task: TaskSpec): string[] {
+  return task.implements_method ?? [];
+}
+
+function taskSearchHaystack(task: TaskSpec): string {
+  const portHaystack = [
+    ...(task.input_ports ?? []).flatMap((p) => [p.name, p.format]),
+    ...(task.output_ports ?? []).flatMap((p) => [p.name, p.format])
+  ];
+  return [
+    task.name,
+    task.inputs.join(" "),
+    task.outputs.join(" "),
+    ...(task.implements_method ?? []),
+    ...(task.uses_tool ?? []),
+    ...portHaystack
+  ]
+    .join(" ")
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+function taskMatchesSearch(task: TaskSpec, query: string): boolean {
+  const haystack = taskSearchHaystack(task);
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+  return tokens.every((token) => haystack.includes(token.replace(/\s+/g, "")));
+}
+
+function taskTypeColor(type: string): string {
+  const key = type.trim().toLowerCase();
+  const palette: Record<string, string> = {
+    entityresolution: "#7c3aed",
+    textprocessing: "#0891b2",
+    schemaalignment: "#0d9488",
+    transform: "#2563eb",
+    aggregation: "#4f46e5",
+    reasoning: "#9333ea",
+    inference: "#a855f7",
+    matching: "#db2777",
+    fusion: "#e11d48",
+    blocking: "#ea580c",
+    clustering: "#d97706",
+    entitylinking: "#0284c7",
+    relationlinking: "#0369a1",
+    interopability: "#64748b"
+  };
+  if (palette[key]) return palette[key];
+
+  let hash = 0;
+  for (let idx = 0; idx < key.length; idx += 1) {
+    hash = (hash * 31 + key.charCodeAt(idx)) >>> 0;
+  }
+  const hue = (hash * 47) % 360;
+  return `hsl(${hue} 55% 42%)`;
 }
 
 function formatColor(format: string): string {

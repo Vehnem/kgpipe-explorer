@@ -38,6 +38,29 @@ export type TaskSpec = {
 
 export type SparqlConstructResponse = Record<string, unknown>;
 
+export type SparqlQueryResult = {
+  head?: { vars?: string[] };
+  boolean?: boolean;
+  results?: {
+    bindings?: Array<Record<string, SparqlBindingTerm>>;
+  };
+};
+
+export type SparqlBindingTerm = {
+  type: string;
+  value: string;
+  datatype?: string;
+  "xml:lang"?: string;
+};
+
+export type DataViewPipelineResult = {
+  pipeline: string;
+  stage: string | null;
+  kg_path: string | null;
+  error: string | null;
+  result: SparqlQueryResult | null;
+};
+
 export type SavedSparqlExample = {
   label: string;
   query: string;
@@ -49,10 +72,16 @@ export type ArtifactFile = {
   mime_type: string;
   size_bytes: number;
   path: string;
+  category?: "meta" | "kg" | "tmp" | "file";
 };
 
-/** { pipeline_id: { stage_id: ArtifactFile[] } } */
-export type ResultsArtifacts = Record<string, Record<string, ArtifactFile[]>>;
+export type StageArtifacts = {
+  files: ArtifactFile[];
+  tmp_count: number;
+};
+
+/** { pipeline_id: { stage_id: StageArtifacts } } */
+export type ResultsArtifacts = Record<string, Record<string, StageArtifacts>>;
 
 export type BenchmarkRun = {
   id: string;
@@ -288,6 +317,43 @@ export async function fetchResultsArtifacts(runId?: string): Promise<ResultsArti
     throw new Error(`Failed to fetch results artifacts (${res.status})`);
   }
   return (await res.json()) as ResultsArtifacts;
+}
+
+export async function fetchResultsTmpArtifacts(
+  pipeline: string,
+  stage: string,
+  runId?: string
+): Promise<ArtifactFile[]> {
+  const url = new URL(`${API_BASE}/results/artifacts/tmp`);
+  url.searchParams.set("pipeline", pipeline);
+  url.searchParams.set("stage", stage);
+  if (runId) {
+    url.searchParams.set("run_id", runId);
+  }
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch tmp artifacts (${res.status})`);
+  }
+  return (await res.json()) as ArtifactFile[];
+}
+
+export async function queryPipelineKgs(
+  query: string,
+  pipelines: string[],
+  runId?: string
+): Promise<DataViewPipelineResult[]> {
+  const res = await fetch(`${API_BASE}/results/dataview/query`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, pipelines, run_id: runId ?? null })
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(
+      detail ? `Failed to run pipeline KG query (${res.status}): ${detail}` : `Failed to run pipeline KG query (${res.status})`
+    );
+  }
+  return (await res.json()) as DataViewPipelineResult[];
 }
 
 export async function fetchDataElements(): Promise<DataElement[]> {

@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import type { ArtifactFile, BenchmarkRun, ResultsArtifacts, TaskSpec } from "../api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ArtifactFile, BenchmarkRun, ResultsArtifacts, StageArtifacts, TaskSpec } from "../api";
 import {
   fetchBenchmarkRuns,
   fetchLeaderboardRunsTsv,
-  fetchResultsArtifacts
+  fetchResultsArtifacts,
+  fetchResultsTmpArtifacts
 } from "../api";
+import { DataViewPanel } from "../components/DataViewPanel";
 import { PipelineName } from "../components/PipelineName";
 import { MetricName } from "../components/MetricName";
 import { MetricDefinitionsNote } from "../components/MetricDefinitionsNote";
@@ -222,14 +224,124 @@ function ArtifactRow({ file }: ArtifactRowProps) {
   );
 }
 
+type StageArtifactsSectionProps = {
+  pipeline: string;
+  stage: string;
+  group: StageArtifacts | null;
+  loading: boolean;
+  runId: string;
+};
+
+function StageArtifactsSection({
+  pipeline,
+  stage,
+  group,
+  loading,
+  runId
+}: StageArtifactsSectionProps) {
+  const [tmpExpanded, setTmpExpanded] = useState(false);
+  const [tmpFiles, setTmpFiles] = useState<ArtifactFile[] | null>(null);
+  const [tmpLoading, setTmpLoading] = useState(false);
+  const [tmpError, setTmpError] = useState("");
+
+  const tmpCount = group?.tmp_count ?? 0;
+  const files = group?.files ?? [];
+
+  const loadTmpFiles = useCallback(async () => {
+    if (tmpFiles !== null || tmpLoading) {
+      return;
+    }
+    setTmpLoading(true);
+    setTmpError("");
+    try {
+      const listed = await fetchResultsTmpArtifacts(pipeline, stage, runId);
+      setTmpFiles(listed);
+    } catch (err) {
+      setTmpError(err instanceof Error ? err.message : "Failed to load intermediate files");
+    } finally {
+      setTmpLoading(false);
+    }
+  }, [pipeline, stage, runId, tmpFiles, tmpLoading]);
+
+  useEffect(() => {
+    setTmpExpanded(false);
+    setTmpFiles(null);
+    setTmpError("");
+  }, [pipeline, stage, runId]);
+
+  async function handleToggleTmp() {
+    const next = !tmpExpanded;
+    setTmpExpanded(next);
+    if (next) {
+      await loadTmpFiles();
+    }
+  }
+
+  return (
+    <div className="results-artifact-stage">
+      <div className="results-artifact-stage-label">{stage}</div>
+      {loading ? (
+        <p className="muted" style={{ margin: "6px 0 0", fontSize: 11 }}>
+          Loading…
+        </p>
+      ) : files.length === 0 && tmpCount === 0 ? (
+        <p className="muted" style={{ margin: "6px 0 0", fontSize: 11 }}>
+          No artifacts recorded for this stage.
+        </p>
+      ) : (
+        <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
+          {files.map((file) => (
+            <ArtifactRow key={file.path} file={file} />
+          ))}
+          {tmpCount > 0 ? (
+            <div className="results-artifact-tmp">
+              <button
+                type="button"
+                className="results-artifact-tmp-toggle"
+                aria-expanded={tmpExpanded}
+                onClick={() => void handleToggleTmp()}
+              >
+                {tmpExpanded
+                  ? "Hide intermediate files"
+                  : `Show ${tmpCount} intermediate file${tmpCount === 1 ? "" : "s"}`}
+                {tmpLoading ? "…" : ""}
+              </button>
+              {tmpExpanded ? (
+                <div className="results-artifact-tmp-list">
+                  {tmpError ? (
+                    <p className="error-banner" style={{ margin: "6px 0 0", fontSize: 11 }}>
+                      {tmpError}
+                    </p>
+                  ) : tmpFiles === null || tmpLoading ? (
+                    <p className="muted" style={{ margin: "6px 0 0", fontSize: 11 }}>
+                      Loading intermediate files…
+                    </p>
+                  ) : tmpFiles.length === 0 ? (
+                    <p className="muted" style={{ margin: "6px 0 0", fontSize: 11 }}>
+                      No intermediate files found.
+                    </p>
+                  ) : (
+                    tmpFiles.map((file) => <ArtifactRow key={file.path} file={file} />)
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
 type ArtifactsPanelProps = {
   pipelines: string[];
   rows: RunRow[];
   artifacts: ResultsArtifacts | null;
   artifactsError: string;
+  runId: string;
 };
 
-function ArtifactsPanel({ pipelines, rows, artifacts, artifactsError }: ArtifactsPanelProps) {
+function ArtifactsPanel({ pipelines, rows, artifacts, artifactsError, runId }: ArtifactsPanelProps) {
   if (artifactsError) {
     return <p className="error-banner">{artifactsError}</p>;
   }
@@ -248,29 +360,16 @@ function ArtifactsPanel({ pipelines, rows, artifacts, artifactsError }: Artifact
               <p className="muted">No stage data found.</p>
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
-                {pipelineStages.map((stage) => {
-                  const files = pipelineArtifacts?.[stage] ?? null;
-                  return (
-                    <div key={stage} className="results-artifact-stage">
-                      <div className="results-artifact-stage-label">{stage}</div>
-                      {artifacts === null ? (
-                        <p className="muted" style={{ margin: "6px 0 0", fontSize: 11 }}>
-                          Loading…
-                        </p>
-                      ) : files === null || files.length === 0 ? (
-                        <p className="muted" style={{ margin: "6px 0 0", fontSize: 11 }}>
-                          No artifacts recorded for this stage.
-                        </p>
-                      ) : (
-                        <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
-                          {files.map((file) => (
-                            <ArtifactRow key={file.name} file={file} />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                {pipelineStages.map((stage) => (
+                  <StageArtifactsSection
+                    key={stage}
+                    pipeline={p}
+                    stage={stage}
+                    group={pipelineArtifacts?.[stage] ?? null}
+                    loading={artifacts === null}
+                    runId={runId}
+                  />
+                ))}
               </div>
             )}
           </div>
@@ -280,212 +379,7 @@ function ArtifactsPanel({ pipelines, rows, artifacts, artifactsError }: Artifact
   );
 }
 
-// ---------------------------------------------------------------------------
-// Data view (query final pipeline KGs)
-// ---------------------------------------------------------------------------
-
-const DEFAULT_DATA_VIEW_QUERY = `CONSTRUCT { ?s ?p ?o }
-WHERE { ?s ?p ?o }
-LIMIT 50`;
-
 type DataTab = "artifacts" | "dataview";
-type DataViewResultMode = "table" | "graph";
-
-type FinalKgTarget = {
-  pipeline: string;
-  stage: string | null;
-  file: ArtifactFile | null;
-};
-
-/** Prefer an explicit final_kg.* artifact; otherwise the last stage's RDF dump. */
-function resolveFinalKgTarget(
-  pipeline: string,
-  rows: RunRow[],
-  artifacts: ResultsArtifacts | null
-): FinalKgTarget {
-  const stages = [...new Set(rows.filter((r) => r.pipeline === pipeline).map((r) => r.stage))];
-  const pipelineArtifacts = artifacts?.[pipeline];
-
-  if (pipelineArtifacts) {
-    for (const stage of stages) {
-      const files = pipelineArtifacts[stage] ?? [];
-      const finalFile = files.find((f) => /^final_kg\./i.test(f.name));
-      if (finalFile) return { pipeline, stage, file: finalFile };
-    }
-  }
-
-  const lastStage = stages.length > 0 ? stages[stages.length - 1] : null;
-  if (lastStage && pipelineArtifacts) {
-    const files = pipelineArtifacts[lastStage] ?? [];
-    const rdfFile =
-      files.find(
-        (f) =>
-          f.mime_type === "text/turtle" ||
-          f.mime_type === "application/n-triples" ||
-          /\.(ttl|nt|rdf)$/i.test(f.name)
-      ) ?? null;
-    return { pipeline, stage: lastStage, file: rdfFile };
-  }
-
-  return { pipeline, stage: lastStage, file: null };
-}
-
-type DataViewPanelProps = {
-  pipelines: string[];
-  rows: RunRow[];
-  artifacts: ResultsArtifacts | null;
-};
-
-function DataViewPanel({ pipelines, rows, artifacts }: DataViewPanelProps) {
-  const [queryText, setQueryText] = useState(DEFAULT_DATA_VIEW_QUERY);
-  const [resultMode, setResultMode] = useState<DataViewResultMode>("table");
-  const [queryStatus, setQueryStatus] = useState("");
-  const [hasRun, setHasRun] = useState(false);
-
-  const targets = useMemo(
-    () => pipelines.map((p) => resolveFinalKgTarget(p, rows, artifacts)),
-    [pipelines, rows, artifacts]
-  );
-
-  function handleRunQuery() {
-    const trimmed = queryText.trim();
-    if (!trimmed) {
-      setQueryStatus("Cannot run an empty query.");
-      return;
-    }
-    if (targets.length === 0) {
-      setQueryStatus("Select 1 or 2 pipelines to query their final KGs.");
-      return;
-    }
-    // Placeholder: backend SPARQL against per-pipeline final KGs is not wired yet.
-    setHasRun(true);
-    const labels = targets
-      .map((t) => (t.file ? t.file.path : `${t.pipeline}/${t.stage ?? "final"}`))
-      .join(" and ");
-    setQueryStatus(
-      `Would send the same SPARQL query to ${targets.length} final KG${
-        targets.length === 1 ? "" : "s"
-      }: ${labels}. Endpoint wiring coming soon — results will appear below.`
-    );
-    emitTutorialEvent(TUTORIAL_EVENTS.queryRan);
-  }
-
-  return (
-    <div className="results-dataview" data-tutorial="results-dataview">
-      <section className="results-dataview-query">
-        <div className="results-section-header" style={{ marginBottom: 8 }}>
-          <h4 style={{ margin: 0, fontSize: 13 }}>SPARQL Query</h4>
-          <span className="muted" style={{ fontSize: 12 }}>
-            Same query runs against each selected final pipeline KG
-          </span>
-        </div>
-        <label htmlFor="results-dataview-query" className="muted" style={{ fontSize: 12 }}>
-          Query text
-        </label>
-        <textarea
-          id="results-dataview-query"
-          className="results-dataview-textarea"
-          value={queryText}
-          onChange={(e) => setQueryText(e.target.value)}
-          rows={8}
-          spellCheck={false}
-        />
-        <div className="results-dataview-targets">
-          {targets.map((t, idx) => (
-            <div key={t.pipeline} className="results-dataview-target">
-              <span className="results-pipeline-index">{idx + 1}</span>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 12 }}>
-                  <PipelineName id={t.pipeline} />
-                </div>
-                <div className="muted" style={{ fontSize: 11 }}>
-                  {t.file
-                    ? `${t.stage} · ${t.file.name}`
-                    : t.stage
-                    ? `${t.stage} · final KG not listed yet`
-                    : "No stage data for final KG"}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <button type="button" data-tutorial="results-run-query" onClick={handleRunQuery}>
-            Run Query
-          </button>
-          <div className="preview-mode-toggle" role="tablist" aria-label="Result view mode">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={resultMode === "table"}
-              className={resultMode === "table" ? "active" : ""}
-              onClick={() => setResultMode("table")}
-            >
-              Result table
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={resultMode === "graph"}
-              className={resultMode === "graph" ? "active" : ""}
-              onClick={() => setResultMode("graph")}
-            >
-              Graph
-            </button>
-          </div>
-        </div>
-        {queryStatus ? <p style={{ margin: "8px 0 0", fontSize: 13 }}>{queryStatus}</p> : null}
-      </section>
-
-      <div className="results-dataview-results">
-        {targets.map((t) => (
-          <div key={t.pipeline} className="results-dataview-result-card">
-            <h4 className="results-artifact-pipeline">
-              <PipelineName id={t.pipeline} />
-            </h4>
-            {resultMode === "table" ? (
-              <div className="table-frame results-dataview-table-placeholder">
-                {hasRun ? (
-                  <table className="leaderboard-table">
-                    <thead>
-                      <tr>
-                        <th>Subject</th>
-                        <th>Predicate</th>
-                        <th>Object</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td colSpan={3} className="muted" style={{ textAlign: "center" }}>
-                          SPARQL result rows will appear here once the final-KG endpoint is
-                          connected.
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                ) : (
-                  <p className="muted" style={{ margin: 0, fontSize: 12 }}>
-                    Run a SPARQL query to populate the result table.
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="graph-canvas-placeholder" style={{ minHeight: 280 }}>
-                <div className="graph-empty-state">
-                  <p>
-                    {hasRun
-                      ? "Graph rendering (as in Metadata Explorer) will appear here once results are available."
-                      : "Run a SPARQL CONSTRUCT query to render graph results."}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Main page component
@@ -817,6 +711,7 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
                 rows={rows}
                 artifacts={artifacts}
                 artifactsError={artifactsError}
+                runId={selectedBenchmarkRunId}
               />
             </>
           ) : (
@@ -828,6 +723,7 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
                 pipelines={selectedPipelines}
                 rows={rows}
                 artifacts={artifacts}
+                runId={selectedBenchmarkRunId}
               />
             </>
           )}

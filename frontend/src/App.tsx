@@ -107,7 +107,6 @@ export function App() {
         <main className="app-content">
           {activePage === "explorer" && (
             <MetadataExplorerPage
-              tasks={tasks}
               selectedEntityId={selectedExplorerEntityId}
               onSelectedEntityIdChange={handleExplorerEntityChange}
             />

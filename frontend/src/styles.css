@@ -232,6 +232,25 @@ body,
   text-overflow: ellipsis;
 }
 
+.task-list-item-types {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.task-type-badge {
+  display: inline-block;
+  border: 1px solid;
+  border-radius: 999px;
+  padding: 0 5px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
 .task-list-item-io {
   display: flex;
   flex-wrap: wrap;
@@ -1785,6 +1804,35 @@ body.kgpipe-practice-guide.driver-active .leaderboard-practice-actions.driver-ac
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.results-artifact-tmp {
+  margin-top: 2px;
+}
+
+.results-artifact-tmp-toggle {
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.results-artifact-tmp-toggle:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.results-artifact-tmp-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  padding-left: 8px;
+  border-left: 2px solid #e2e8f0;
 }
 
 .results-dataview {

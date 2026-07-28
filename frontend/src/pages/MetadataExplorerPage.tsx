@@ -8,14 +8,12 @@ import {
   fetchSavedSparqlExamples,
   saveSparqlExample,
   type EntityTypeInfo,
-  type SavedSparqlExample,
-  type TaskSpec
+  type SavedSparqlExample
 } from "../api";
 
 cytoscape.use(cola);
 
 type MetadataExplorerPageProps = {
-  tasks: TaskSpec[];
   selectedEntityId: string;
   onSelectedEntityIdChange: (entityId: string) => void;
 };
@@ -482,7 +480,6 @@ function buildEntitiesFromConstruct(
 }
 
 export function MetadataExplorerPage({
-  tasks,
   selectedEntityId,
   onSelectedEntityIdChange
 }: MetadataExplorerPageProps) {
@@ -623,14 +620,6 @@ export function MetadataExplorerPage({
     }
   }, [entities, filteredEntities, onSelectedEntityIdChange, selectedEntityId]);
 
-  const selectedTask = useMemo(() => {
-    if (selectedEntityId) {
-      const exact = tasks.find((task) => (task.uri ?? task.name) === selectedEntityId);
-      if (exact) return exact;
-    }
-    return null;
-  }, [selectedEntityId, tasks]);
-
   const selectedEntity = useMemo(() => {
     if (!selectedEntityId) return null;
     return entities.find((entity) => entity.id === selectedEntityId) ?? null;
@@ -645,7 +634,6 @@ export function MetadataExplorerPage({
 
       const id = selectedEntityId;
       if (!id) return;
-      if (selectedTask) return;
 
       setFetchedEntityStatus("Loading selected entity…");
       try {
@@ -669,7 +657,7 @@ export function MetadataExplorerPage({
     return () => {
       cancelled = true;
     };
-  }, [selectedEntityId, selectedTask]);
+  }, [selectedEntityId]);
 
   useEffect(() => {
     if (!graphContainerRef.current) return;
@@ -1133,87 +1121,7 @@ export function MetadataExplorerPage({
           </nav>
 
           {detailViewMode === "entity" ? (
-            selectedTask ? (
-              <>
-                <h3>{selectedTask.name}</h3>
-                <div className="detail-grid">
-                  <section>
-                    <h4>Inputs</h4>
-                    <TagList
-                      values={
-                        (selectedTask.input_ports?.length ?? 0) > 0
-                          ? selectedTask.input_ports!.map((p) =>
-                              p.name === p.format ? p.format : `${p.name}: ${p.format}`
-                            )
-                          : selectedTask.inputs
-                      }
-                      emptyLabel="No declared inputs"
-                    />
-                  </section>
-                  <section>
-                    <h4>Outputs</h4>
-                    <TagList
-                      values={
-                        (selectedTask.output_ports?.length ?? 0) > 0
-                          ? selectedTask.output_ports!.map((p) =>
-                              p.name === p.format ? p.format : `${p.name}: ${p.format}`
-                            )
-                          : selectedTask.outputs
-                      }
-                      emptyLabel="No declared outputs"
-                    />
-                  </section>
-                  <section>
-                    <h4>Implements Methods</h4>
-                    <TagList
-                      values={selectedTask.implements_method ?? []}
-                      emptyLabel="No methods linked"
-                    />
-                  </section>
-                  <section>
-                    <h4>Uses Tools</h4>
-                    <TagList
-                      values={selectedTask.uses_tool ?? []}
-                      emptyLabel="No tools linked"
-                    />
-                  </section>
-                  <section>
-                    <h4>Parameters</h4>
-                    {selectedTask.config_spec?.parameters?.length ? (
-                      <div className="param-options-list">
-                        {selectedTask.config_spec.description ? (
-                          <p className="muted">{selectedTask.config_spec.description}</p>
-                        ) : null}
-                        {selectedTask.config_spec.parameters.map((param) => (
-                          <div key={param.name} className="param-option-row">
-                            <div className="param-option-header">
-                              <span className="param-option-name">
-                                {param.name}
-                                {param.required ? " *" : ""}
-                              </span>
-                              <span className="tag">{param.datatype}</span>
-                            </div>
-                            <div className="param-option-meta muted">
-                              {param.default_value !== undefined && param.default_value !== null
-                                ? `default: ${String(param.default_value)}`
-                                : null}
-                              {(param.allowed_values?.length ?? 0) > 0
-                                ? ` options: ${(param.allowed_values ?? []).map(String).join(", ")}`
-                                : null}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <TagList
-                        values={selectedTask.has_parameter ?? []}
-                        emptyLabel="No parameters linked"
-                      />
-                    )}
-                  </section>
-                </div>
-              </>
-            ) : selectedEntity ? (
+            selectedEntity ? (
               <>
                 <h3>{selectedEntity.label}</h3>
                 <p>
@@ -1399,22 +1307,3 @@ function QueryTermCell({ term, onSelectEntity }: QueryTermCellProps) {
   );
 }
 
-type TagListProps = {
-  values: string[];
-  emptyLabel: string;
-};
-
-function TagList({ values, emptyLabel }: TagListProps) {
-  if (values.length === 0) {
-    return <p className="muted">{emptyLabel}</p>;
-  }
-  return (
-    <div className="tag-list">
-      {values.map((value) => (
-        <span key={value} className="tag">
-          {value}
-        </span>
-      ))}
-    </div>
-  );
-}
