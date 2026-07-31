@@ -38,6 +38,7 @@ type PipelineNodeData = {
   parameterValues?: Record<string, ParameterValue>;
   configSpec?: ConfigSpec | null;
   onConfigure?: () => void;
+  onInspect?: () => void;
 };
 
 type DataNodeData = {
@@ -99,6 +100,12 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
     [tasks]
   );
 
+  const inspectHandlerRef = React.useRef<(taskName: string) => void>(() => {});
+  inspectHandlerRef.current = (taskName: string) => {
+    const task = taskByName[taskName];
+    if (task) setInspectedTask(task);
+  };
+
   useEffect(() => {
     if (tasks.length === 0) {
       return;
@@ -114,7 +121,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
 
     const draft = readBuilderDraft();
     if (draft) {
-      setNodes(rehydrateBuilderNodes(draft.nodes, taskByName, configureHandlerRef));
+      setNodes(rehydrateBuilderNodes(draft.nodes, taskByName, configureHandlerRef, inspectHandlerRef));
       setEdges(draft.edges);
       setSearch(draft.search);
       setSelectedTask(draft.selectedTask);
@@ -139,7 +146,9 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
 
   useEffect(() => {
     if (!builderDraftHydrated || tasks.length === 0) return;
-    setNodes((current) => rehydrateBuilderNodes(current, taskByName, configureHandlerRef));
+    setNodes((current) =>
+      rehydrateBuilderNodes(current, taskByName, configureHandlerRef, inspectHandlerRef)
+    );
   }, [builderDraftHydrated, setNodes, taskByName, tasks.length]);
 
   useEffect(() => {
@@ -224,7 +233,8 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           outputPorts,
           configSpec: task?.config_spec ?? null,
           parameterValues: defaultParameterValues(task?.config_spec),
-          onConfigure: () => configureHandlerRef.current(nodeId)
+          onConfigure: () => configureHandlerRef.current(nodeId),
+          onInspect: () => inspectHandlerRef.current(n.task_name)
         }
       } as PipelineNode;
     });
@@ -315,7 +325,8 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           outputPorts,
           configSpec: task.config_spec ?? null,
           parameterValues: defaultParameterValues(task.config_spec),
-          onConfigure: () => configureHandlerRef.current(id)
+          onConfigure: () => configureHandlerRef.current(id),
+          onInspect: () => inspectHandlerRef.current(taskName)
         }
       }
     ]);
@@ -785,7 +796,8 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         ) : (
           <p className="builder-connect-hint">
             Connect from right output handles to left input handles. Click a connection to select it,
-            then remove it with the button or Delete/Backspace. Use ⚙ on a task to set parameters.
+            then remove it with the button or Delete/Backspace. Use ℹ on a task to inspect details,
+            or double-click the node. Use ⚙ to set parameters.
           </p>
         )}
         <h3>Loose Ends</h3>
@@ -827,6 +839,12 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
               nodeId: node.id,
               taskName
             });
+          }}
+          onNodeDoubleClick={(_, node) => {
+            if (node.type !== "taskNode") return;
+            const taskName = (node.data as PipelineNodeData).label;
+            const task = taskByName[taskName];
+            if (task) setInspectedTask(task);
           }}
           onEdgeClick={(_, edge) => {
             setSelectedEdgeId(edge.id);
@@ -1096,6 +1114,10 @@ function TaskDetailModal({ task, onClose, onAddToCanvas }: TaskDetailModalProps)
     if (e.target === e.currentTarget) onClose();
   }
 
+  const seeAlso = task.see_also ?? [];
+  const version = task.version?.trim() || "";
+  const description = task.description?.trim() || "";
+
   return (
     <div className="modal-backdrop" onClick={handleBackdrop}>
       <div className="modal-card" role="dialog" aria-modal="true" aria-label={task.name}>
@@ -1107,12 +1129,24 @@ function TaskDetailModal({ task, onClose, onAddToCanvas }: TaskDetailModalProps)
         </div>
 
         <div className="modal-body">
+          {description ? (
+            <div className="modal-section">
+              <h4>Description</h4>
+              <p className="modal-description">{description}</p>
+            </div>
+          ) : null}
           {task.uri && (
             <div className="modal-section">
               <h4>URI</h4>
               <code className="modal-uri">{task.uri}</code>
             </div>
           )}
+          {version ? (
+            <div className="modal-section">
+              <h4>Version</h4>
+              <span className="modal-meta-value">{version}</span>
+            </div>
+          ) : null}
           <div className="modal-section">
             <h4>Inputs</h4>
             <TagPills values={portLabels(portsFromTask(task, "input"))} empty="No declared inputs" />
@@ -1131,6 +1165,20 @@ function TaskDetailModal({ task, onClose, onAddToCanvas }: TaskDetailModalProps)
             <div className="modal-section">
               <h4>Uses Tool</h4>
               <TagPills values={task.uses_tool ?? []} empty="" />
+            </div>
+          )}
+          {seeAlso.length > 0 && (
+            <div className="modal-section">
+              <h4>See Also</h4>
+              <ul className="modal-link-list">
+                {seeAlso.map((link) => (
+                  <li key={link}>
+                    <a href={link} target="_blank" rel="noreferrer">
+                      {link}
+                    </a>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
           <div className="modal-section">
@@ -1431,7 +1479,11 @@ function serializeBuilderNode(node: AnyNode): AnyNode {
     return { ...node, selected: false } as DataNode;
   }
 
-  const { onConfigure: _onConfigure, ...data } = node.data as PipelineNodeData;
+  const {
+    onConfigure: _onConfigure,
+    onInspect: _onInspect,
+    ...data
+  } = node.data as PipelineNodeData;
   return {
     ...node,
     selected: false,
@@ -1442,7 +1494,8 @@ function serializeBuilderNode(node: AnyNode): AnyNode {
 function rehydrateBuilderNodes(
   nodes: AnyNode[],
   taskByName: Record<string, TaskSpec>,
-  configureHandlerRef: React.MutableRefObject<(nodeId: string) => void>
+  configureHandlerRef: React.MutableRefObject<(nodeId: string) => void>,
+  inspectHandlerRef: React.MutableRefObject<(taskName: string) => void>
 ): AnyNode[] {
   return nodes.map((node) => {
     if (node.type !== "taskNode") {
@@ -1477,7 +1530,8 @@ function rehydrateBuilderNodes(
           ...defaultParameterValues(configSpec),
           ...(data.parameterValues ?? {})
         },
-        onConfigure: () => configureHandlerRef.current(node.id)
+        onConfigure: () => configureHandlerRef.current(node.id),
+        onInspect: () => inspectHandlerRef.current(data.label)
       }
     } as PipelineNode;
   });
@@ -1615,10 +1669,13 @@ function taskSearchHaystack(task: TaskSpec): string {
   ];
   return [
     task.name,
+    task.description ?? "",
+    task.version ?? "",
     task.inputs.join(" "),
     task.outputs.join(" "),
     ...(task.implements_method ?? []),
     ...(task.uses_tool ?? []),
+    ...(task.see_also ?? []),
     ...portHaystack
   ]
     .join(" ")
@@ -1703,20 +1760,6 @@ function TaskNode({ data, selected }: NodeProps<PipelineNode>) {
     >
       <div className="task-node-header">
         <div className="task-node-title">{data.label}</div>
-        {hasConfig && (
-          <button
-            type="button"
-            className="task-node-settings-btn nodrag nopan"
-            title="Configure parameters"
-            aria-label={`Configure parameters for ${data.label}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              data.onConfigure?.();
-            }}
-          >
-            ⚙
-          </button>
-        )}
       </div>
 
       {inputPorts.map((port, idx) => (
@@ -1772,6 +1815,35 @@ function TaskNode({ data, selected }: NodeProps<PipelineNode>) {
           ))}
         </div>
       )}
+
+      <div className="task-node-actions">
+        <button
+          type="button"
+          className="task-node-action-btn nodrag nopan"
+          title="Inspect task details"
+          aria-label={`Inspect details for ${data.label}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            data.onInspect?.();
+          }}
+        >
+          ℹ
+        </button>
+        {hasConfig && (
+          <button
+            type="button"
+            className="task-node-action-btn nodrag nopan"
+            title="Configure parameters"
+            aria-label={`Configure parameters for ${data.label}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              data.onConfigure?.();
+            }}
+          >
+            ⚙
+          </button>
+        )}
+      </div>
     </div>
   );
 }

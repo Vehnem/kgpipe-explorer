@@ -53,6 +53,9 @@ class ConfigSpec(BaseModel):
 class TaskImplSpec(BaseModel):
     uri: Optional[str] = None
     name: str
+    description: Optional[str] = None
+    version: Optional[str] = None
+    see_also: list[str] = []
     # Format lists derived from ports (may contain duplicates when multiple ports share a format).
     inputs: list[str] = []
     outputs: list[str] = []
@@ -176,6 +179,7 @@ def _base_runs_tsv_path(run_def: dict) -> Path:
 
 def _load_task_specs() -> dict[str, TaskImplSpec]:
     implementations: List[ImplementationEntity] = PipeKG.find_implementation()
+    runtime_by_name = _runtime_task_metadata()
     task_specs: dict[str, TaskImplSpec] = {}
     for implementation in implementations:
         input_ports = [
@@ -218,9 +222,16 @@ def _load_task_specs() -> dict[str, TaskImplSpec]:
                 parameters=param_specs,
             )
 
+        runtime = runtime_by_name.get(implementation.name, {})
+        description = implementation.description or runtime.get("description")
+        see_also = list(implementation.see_also) or list(runtime.get("see_also") or [])
+
         task_specs[implementation.name] = TaskImplSpec(
             uri=str(implementation.uri),
             name=implementation.name,
+            description=description,
+            version=implementation.version or None,
+            see_also=see_also,
             inputs=[port.format for port in input_ports],
             outputs=[port.format for port in output_ports],
             input_ports=input_ports,
@@ -231,6 +242,32 @@ def _load_task_specs() -> dict[str, TaskImplSpec]:
             config_spec=config_spec,
         )
     return task_specs
+
+
+_runtime_task_metadata_cache: dict[str, dict[str, object]] | None = None
+
+
+def _runtime_task_metadata() -> dict[str, dict[str, object]]:
+    """Optional Registry fallback for fields not yet persisted in PipeKG."""
+    global _runtime_task_metadata_cache
+    if _runtime_task_metadata_cache is not None:
+        return _runtime_task_metadata_cache
+    try:
+        from kgpipe.common.discovery import discover_kgpipe_tasks
+        from kgpipe.common.registry import Registry
+
+        discover_kgpipe_tasks()
+        metadata: dict[str, dict[str, object]] = {}
+        for task in Registry.list("task"):
+            metadata[task.name] = {
+                "description": getattr(task, "description", None),
+                "see_also": list(getattr(task, "see_also", None) or []),
+            }
+        _runtime_task_metadata_cache = metadata
+        return metadata
+    except Exception:
+        _runtime_task_metadata_cache = {}
+        return _runtime_task_metadata_cache
 
 
 @app.get("/health")

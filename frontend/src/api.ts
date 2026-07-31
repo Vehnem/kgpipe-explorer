@@ -26,6 +26,9 @@ export type ConfigSpec = {
 export type TaskSpec = {
   uri?: string;
   name: string;
+  description?: string | null;
+  version?: string | null;
+  see_also?: string[];
   inputs: string[];
   outputs: string[];
   input_ports?: DataPortSpec[];

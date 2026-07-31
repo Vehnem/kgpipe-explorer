@@ -293,12 +293,13 @@ body,
 }
 
 .task-node {
+  position: relative;
   min-width: 180px;
   border: 1px solid #d1d5db;
   border-radius: 10px;
   background: #fff;
   box-shadow: 0 1px 4px rgb(0 0 0 / 8%);
-  padding: 10px 10px 8px;
+  padding: 10px 10px 32px;
   transition: box-shadow 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
 
@@ -312,32 +313,38 @@ body,
   font-size: 13px;
   font-weight: 700;
   margin-bottom: 0;
-  flex: 1;
   min-width: 0;
   word-break: break-word;
 }
 
 .task-node-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
   margin-bottom: 6px;
 }
 
+.task-node-actions {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: flex;
+  gap: 4px;
+}
+
+.task-node-action-btn,
 .task-node-settings-btn {
   flex-shrink: 0;
   border: 1px solid #e2e8f0;
   background: #f8fafc;
   color: #475569;
   border-radius: 6px;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   line-height: 1;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
 }
 
+.task-node-action-btn:hover,
 .task-node-settings-btn:hover {
   background: #eff6ff;
   border-color: #93c5fd;
@@ -535,6 +542,31 @@ body,
   color: #475569;
   word-break: break-all;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+.modal-description {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #334155;
+}
+
+.modal-meta-value {
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.modal-link-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.modal-link-list a {
+  font-size: 12px;
+  word-break: break-all;
+  color: #1d4ed8;
 }
 
 .param-options-list {
