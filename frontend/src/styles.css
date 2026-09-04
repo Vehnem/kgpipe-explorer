@@ -2134,6 +2134,38 @@ body.kgpipe-practice-guide.driver-active .driver-active-element {
   line-height: 1.45;
 }
 
+.kgpipe-end-to-end-popover {
+  max-width: 420px;
+}
+
+.kgpipe-end-to-end-popover .driver-popover-description p {
+  margin: 0 0 8px;
+}
+
+.kgpipe-end-to-end-popover .driver-popover-description details {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+}
+
+.kgpipe-end-to-end-popover .driver-popover-description summary {
+  color: #1d4ed8;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.kgpipe-end-to-end-popover .driver-popover-description details p {
+  margin: 8px 0 0;
+}
+
+.kgpipe-end-to-end-popover .tutorial-action-hint {
+  color: #0f172a;
+  font-weight: 700;
+  margin-top: 10px;
+}
+
 .kgpipe-tutorial-popover .driver-popover-next-btn,
 .kgpipe-tutorial-popover .driver-popover-done-btn {
   background: #2563eb;

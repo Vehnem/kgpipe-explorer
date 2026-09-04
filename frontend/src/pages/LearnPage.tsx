@@ -106,8 +106,8 @@ export function LearnPage({ onNavigate }: LearnPageProps) {
           <p className="learn-eyebrow">Welcome</p>
           <h2>Get started with KGpipe Explorer</h2>
           <p>
-            This workspace helps you inspect knowledge-graph metadata, design
-            pipelines, compare run outputs, and reason about rankings. Follow the
+            This workspace helps you design pipelines, compare run outputs,
+            reason about rankings, and inspect knowledge-graph metadata. Follow the
             suggested workflow below, then dig into the concepts when you want more
             background.
           </p>

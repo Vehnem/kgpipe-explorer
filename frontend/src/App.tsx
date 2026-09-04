@@ -70,13 +70,6 @@ export function App() {
           </button>
           <button
             type="button"
-            className={activePage === "explorer" ? "active" : ""}
-            onClick={() => navigateToPage("explorer")}
-          >
-            Metadata Explorer
-          </button>
-          <button
-            type="button"
             className={activePage === "builder" ? "active" : ""}
             onClick={() => navigateToPage("builder")}
           >
@@ -95,6 +88,13 @@ export function App() {
             onClick={() => navigateToPage("leaderboard")}
           >
             Pipeline Leaderboard
+          </button>
+          <button
+            type="button"
+            className={activePage === "explorer" ? "active" : ""}
+            onClick={() => navigateToPage("explorer")}
+          >
+            Metadata Explorer
           </button>
         </nav>
       </header>
@@ -117,7 +117,11 @@ export function App() {
           {activePage === "learn" && <LearnPage onNavigate={navigateToPage} />}
         </main>
       )}
-      <TutorialButton page={activePage} onOpenLearn={() => navigateToPage("learn")} />
+      <TutorialButton
+        page={activePage}
+        onOpenLearn={() => navigateToPage("learn")}
+        onNavigateToPage={navigateToPage}
+      />
     </div>
   );
 }

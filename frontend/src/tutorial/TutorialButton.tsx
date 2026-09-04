@@ -5,12 +5,14 @@ import {
   startResultsPracticeGuide,
   startTutorialForPage
 } from "./tutorialDriver";
+import { startEndToEndGuide } from "./endToEndGuide";
 import { getStoredTutorialLanguage, storeTutorialLanguage } from "./tutorialStorage";
 import type { TutorialLanguage, TutorialPage } from "./tutorialTypes";
 
 type TutorialButtonProps = {
   page: TutorialPage;
   onOpenLearn: () => void;
+  onNavigateToPage: (page: TutorialPage) => void;
 };
 
 const PRACTICE_LABELS: Partial<Record<TutorialPage, string>> = {
@@ -19,7 +21,7 @@ const PRACTICE_LABELS: Partial<Record<TutorialPage, string>> = {
   leaderboard: "Practice: rebuild ranking"
 };
 
-export function TutorialButton({ page, onOpenLearn }: TutorialButtonProps) {
+export function TutorialButton({ page, onOpenLearn, onNavigateToPage }: TutorialButtonProps) {
   const [open, setOpen] = useState(false);
   const [language, setLanguage] = useState<TutorialLanguage>(() => getStoredTutorialLanguage());
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -59,6 +61,11 @@ export function TutorialButton({ page, onOpenLearn }: TutorialButtonProps) {
     }
   }
 
+  function handleStartEndToEndGuide() {
+    setOpen(false);
+    startEndToEndGuide(language, onNavigateToPage);
+  }
+
   function handleOpenLearn() {
     setOpen(false);
     onOpenLearn();
@@ -85,6 +92,9 @@ export function TutorialButton({ page, onOpenLearn }: TutorialButtonProps) {
           <div className="tutorial-help-actions">
             <button type="button" onClick={handleStartTour}>
               Start page tour
+            </button>
+            <button type="button" onClick={handleStartEndToEndGuide}>
+              End-to-end example: Movie KG
             </button>
             {practiceLabel ? (
               <button type="button" onClick={handleStartPracticeGuide}>
