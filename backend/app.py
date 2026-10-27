@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 import logging
+import os
+import threading
+import time
 from pathlib import Path
 from typing import List, Optional
 
@@ -308,11 +312,26 @@ def construct_sparql(query: str = Body(..., embed=True)) -> dict[str, object]:
 # ---------------------------------------------------------------------------
 
 SAVED_QUERIES_DB_PATH = Path(__file__).resolve().parent / "saved_queries.sqlite"
+_EXAMPLE_SCOPES = frozenset({"explorer", "dataview"})
 
 
 class SavedSparqlExample(BaseModel):
     label: str
     query: str
+
+
+def _normalize_example_scope(scope: str) -> str:
+    value = scope.strip() or "explorer"
+    if value not in _EXAMPLE_SCOPES:
+        raise HTTPException(status_code=400, detail="scope must be 'explorer' or 'dataview'")
+    return value
+
+
+def _builtin_examples_for_scope(scope: str) -> list[dict[str, object]]:
+    fixtures = get_fixtures()
+    if scope == "dataview":
+        return fixtures.dataview_sparql_examples
+    return fixtures.sparql_builtin_examples
 
 
 def _get_db() -> sqlite3.Connection:
@@ -321,35 +340,66 @@ def _get_db() -> sqlite3.Connection:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS sparql_examples (
-            label TEXT PRIMARY KEY,
+            scope TEXT NOT NULL DEFAULT 'explorer',
+            label TEXT NOT NULL,
             query TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (scope, label)
         )
         """
     )
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(sparql_examples)")}
+    if "scope" not in columns:
+        conn.execute("ALTER TABLE sparql_examples RENAME TO sparql_examples_legacy")
+        conn.execute(
+            """
+            CREATE TABLE sparql_examples (
+                scope TEXT NOT NULL DEFAULT 'explorer',
+                label TEXT NOT NULL,
+                query TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (scope, label)
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO sparql_examples(scope, label, query, created_at)
+            SELECT 'explorer', label, query, created_at FROM sparql_examples_legacy
+            """
+        )
+        conn.execute("DROP TABLE sparql_examples_legacy")
     return conn
 
 
 @app.get("/sparql/examples/builtin", response_model=list[SavedSparqlExample])
-def list_builtin_sparql_examples() -> list[SavedSparqlExample]:
+def list_builtin_sparql_examples(scope: str = "explorer") -> list[SavedSparqlExample]:
     """Return builtin SPARQL example queries from fixtures."""
+    normalized = _normalize_example_scope(scope)
     return [
-        SavedSparqlExample(label=item["label"], query=item["query"])
-        for item in get_fixtures().sparql_builtin_examples
+        SavedSparqlExample(label=str(item["label"]), query=str(item["query"]))
+        for item in _builtin_examples_for_scope(normalized)
     ]
 
 
 @app.get("/sparql/examples", response_model=list[SavedSparqlExample])
-def list_saved_sparql_examples() -> list[SavedSparqlExample]:
+def list_saved_sparql_examples(scope: str = "explorer") -> list[SavedSparqlExample]:
+    normalized = _normalize_example_scope(scope)
     with _get_db() as conn:
         rows = conn.execute(
-            "SELECT label, query FROM sparql_examples ORDER BY created_at DESC, label ASC"
+            """
+            SELECT label, query FROM sparql_examples
+            WHERE scope = ?
+            ORDER BY created_at DESC, label ASC
+            """,
+            (normalized,),
         ).fetchall()
     return [SavedSparqlExample(label=row["label"], query=row["query"]) for row in rows]
 
 
 @app.post("/sparql/examples", response_model=SavedSparqlExample)
-def save_sparql_example(example: SavedSparqlExample) -> SavedSparqlExample:
+def save_sparql_example(example: SavedSparqlExample, scope: str = "explorer") -> SavedSparqlExample:
+    normalized = _normalize_example_scope(scope)
     label = example.label.strip()
     query = example.query.strip()
     if not label:
@@ -361,13 +411,13 @@ def save_sparql_example(example: SavedSparqlExample) -> SavedSparqlExample:
     with _get_db() as conn:
         conn.execute(
             """
-            INSERT INTO sparql_examples(label, query, created_at)
-            VALUES(?, ?, ?)
-            ON CONFLICT(label) DO UPDATE SET
+            INSERT INTO sparql_examples(scope, label, query, created_at)
+            VALUES(?, ?, ?, ?)
+            ON CONFLICT(scope, label) DO UPDATE SET
                 query=excluded.query,
                 created_at=excluded.created_at
             """,
-            (label, query, created_at),
+            (normalized, label, query, created_at),
         )
         conn.commit()
     return SavedSparqlExample(label=label, query=query)
@@ -1119,11 +1169,123 @@ def _sparql_result_to_json(result: object) -> dict[str, object]:
     return {"head": {"vars": ["s", "p", "o"]}, "results": {"bindings": bindings}}
 
 
-def _execute_sparql_on_nt(kg_path: Path, query: str) -> dict[str, object]:
+class _NtGraphCacheEntry:
+    def __init__(self, graph: Graph) -> None:
+        self.graph = graph
+        self.lock = threading.Lock()
+        self.loaded_at = time.monotonic()
+
+
+class _NtGraphCache:
+    """Keep recently parsed N-Triples graphs so repeat SPARQL skips ``Graph.parse``.
+
+    A ``result.nt`` of about 17MB takes ~15s to parse and ~170MB of memory.
+    Entries are the last ``max_entries`` graphs, dropped after ``ttl_seconds``
+    (``0`` disables the time limit). The key includes mtime and size, so a
+    rewritten file is parsed again. ``max_entries <= 0`` disables the cache.
+    """
+
+    def __init__(self, max_entries: int, ttl_seconds: float) -> None:
+        self.max_entries = max_entries
+        self.ttl_seconds = ttl_seconds
+        self._lock = threading.Lock()
+        self._entries: OrderedDict[tuple[str, int, int], _NtGraphCacheEntry] = OrderedDict()
+
+    def get(self, path: Path) -> tuple[Graph, threading.Lock]:
+        if self.max_entries <= 0:
+            return _parse_nt_graph(path), threading.Lock()
+
+        key = _nt_file_key(path)
+        with self._lock:
+            self._evict_expired(time.monotonic())
+            cached = self._entries.get(key)
+            if cached is not None:
+                self._entries.move_to_end(key)
+                REQUEST_LOGGER.info("nt graph cache hit path=%s", key[0])
+                return cached.graph, cached.lock
+
+        graph = _parse_nt_graph(path)
+        # Don't store a graph under a fingerprint the file no longer has.
+        if _nt_file_key(path) != key:
+            REQUEST_LOGGER.info("nt graph cache skip path=%s (file changed during parse)", key[0])
+            return graph, threading.Lock()
+
+        entry = _NtGraphCacheEntry(graph)
+        with self._lock:
+            self._evict_expired(time.monotonic())
+            existing = self._entries.get(key)
+            if existing is not None:
+                self._entries.move_to_end(key)
+                REQUEST_LOGGER.info("nt graph cache hit path=%s", key[0])
+                return existing.graph, existing.lock
+            for stale in [item for item in self._entries if item[0] == key[0]]:
+                del self._entries[stale]
+            self._entries[key] = entry
+            self._entries.move_to_end(key)
+            while len(self._entries) > self.max_entries:
+                self._entries.popitem(last=False)
+        REQUEST_LOGGER.info("nt graph cache miss path=%s", key[0])
+        return entry.graph, entry.lock
+
+    def _evict_expired(self, now: float) -> None:
+        if self.ttl_seconds <= 0:
+            return
+        expired = [
+            item
+            for item, entry in self._entries.items()
+            if now - entry.loaded_at >= self.ttl_seconds
+        ]
+        for item in expired:
+            del self._entries[item]
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        REQUEST_LOGGER.warning("Ignoring invalid %s=%r; using %s", name, raw, default)
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        REQUEST_LOGGER.warning("Ignoring invalid %s=%r; using %s", name, raw, default)
+        return default
+
+
+def _nt_file_key(path: Path) -> tuple[str, int, int]:
+    resolved = path.resolve()
+    stat = resolved.stat()
+    return (str(resolved), stat.st_mtime_ns, stat.st_size)
+
+
+def _parse_nt_graph(path: Path) -> Graph:
     graph = Graph()
-    graph.parse(kg_path, format="nt")
-    result = graph.query(query)
-    return _sparql_result_to_json(result)
+    graph.parse(path, format="nt")
+    return graph
+
+
+# Last few final result.nt graphs. Size 0 disables the cache; TTL 0 keeps
+# entries until they fall out of the LRU window.
+_NT_GRAPH_CACHE_SIZE = max(0, _env_int("KGPIPE_NT_GRAPH_CACHE_SIZE", 4))
+_NT_GRAPH_CACHE_TTL_SECONDS = max(0.0, _env_float("KGPIPE_NT_GRAPH_CACHE_TTL_SECONDS", 1800.0))
+_nt_graph_cache = _NtGraphCache(_NT_GRAPH_CACHE_SIZE, _NT_GRAPH_CACHE_TTL_SECONDS)
+
+
+def _execute_sparql_on_nt(kg_path: Path, query: str) -> dict[str, object]:
+    """Run SPARQL against one N-Triples file, reusing a cached rdflib graph."""
+    graph, lock = _nt_graph_cache.get(kg_path)
+    with lock:
+        result = graph.query(query)
+        return _sparql_result_to_json(result)
 
 
 class DataViewQueryRequest(BaseModel):

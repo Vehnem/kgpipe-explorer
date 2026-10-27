@@ -20,6 +20,7 @@ class Fixtures:
     stage_artifacts: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     data_elements: list[dict[str, Any]] = field(default_factory=list)
     sparql_builtin_examples: list[dict[str, Any]] = field(default_factory=list)
+    dataview_sparql_examples: list[dict[str, Any]] = field(default_factory=list)
     entity_types: dict[str, Any] = field(default_factory=dict)
     leaderboard_defaults: dict[str, Any] = field(default_factory=dict)
     # Default metrics file used when a benchmark has no dedicated TSV.
@@ -55,6 +56,7 @@ def load_fixtures(fixtures_dir: Path | None = None) -> Fixtures:
         stage_artifacts=_read_json(root / "stage_artifacts.json"),
         data_elements=_read_json(root / "data_elements.json"),
         sparql_builtin_examples=_read_json(root / "sparql_builtin_examples.json"),
+        dataview_sparql_examples=_read_json(root / "dataview_sparql_examples.json"),
         entity_types=_read_json(root / "entity_types.json"),
         leaderboard_defaults=_read_json(root / "leaderboard_defaults.json"),
         default_runs_tsv_path=root / "runs" / "kgi-bench-movie.tsv",

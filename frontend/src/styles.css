@@ -1879,6 +1879,19 @@ body.kgpipe-practice-guide.driver-active .leaderboard-practice-actions.driver-ac
   background: #fff;
 }
 
+.results-dataview-select {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 4px 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: #0f172a;
+  background: #fff;
+}
+
 .results-dataview-textarea {
   display: block;
   width: 100%;

@@ -69,6 +69,9 @@ export type SavedSparqlExample = {
   query: string;
 };
 
+/** explorer = Metadata Explorer; dataview = Pipeline Results Data View. */
+export type SparqlExampleScope = "explorer" | "dataview";
+
 export type ArtifactFile = {
   name: string;
   description: string;
@@ -222,16 +225,25 @@ export async function constructSparql(
   return (await res.json()) as SparqlConstructResponse;
 }
 
-export async function fetchSavedSparqlExamples(): Promise<SavedSparqlExample[]> {
-  const res = await fetch(`${API_BASE}/sparql/examples`);
+export async function fetchSavedSparqlExamples(
+  scope: SparqlExampleScope = "explorer"
+): Promise<SavedSparqlExample[]> {
+  const url = new URL(`${API_BASE}/sparql/examples`);
+  url.searchParams.set("scope", scope);
+  const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Failed to fetch saved SPARQL examples (${res.status})`);
   }
   return (await res.json()) as SavedSparqlExample[];
 }
 
-export async function saveSparqlExample(payload: SavedSparqlExample): Promise<SavedSparqlExample> {
-  const res = await fetch(`${API_BASE}/sparql/examples`, {
+export async function saveSparqlExample(
+  payload: SavedSparqlExample,
+  scope: SparqlExampleScope = "explorer"
+): Promise<SavedSparqlExample> {
+  const url = new URL(`${API_BASE}/sparql/examples`);
+  url.searchParams.set("scope", scope);
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -367,8 +379,12 @@ export async function fetchDataElements(): Promise<DataElement[]> {
   return (await res.json()) as DataElement[];
 }
 
-export async function fetchBuiltinSparqlExamples(): Promise<SavedSparqlExample[]> {
-  const res = await fetch(`${API_BASE}/sparql/examples/builtin`);
+export async function fetchBuiltinSparqlExamples(
+  scope: SparqlExampleScope = "explorer"
+): Promise<SavedSparqlExample[]> {
+  const url = new URL(`${API_BASE}/sparql/examples/builtin`);
+  url.searchParams.set("scope", scope);
+  const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Failed to fetch builtin SPARQL examples (${res.status})`);
   }
