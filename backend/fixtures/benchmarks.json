@@ -41,6 +41,222 @@
       "filter": "allowlist",
       "pipeline_allowlist": ["R_A", "R_B", "R_C", "J_A", "J_B", "RJT"],
       "perturb": true
+    },
+    {
+      "id": "text2kg-university",
+      "name": "Text2KG: University",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-musical-work",
+      "name": "Text2KG: Musical work",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-airport",
+      "name": "Text2KG: Airport",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-building",
+      "name": "Text2KG: Building",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-athlete",
+      "name": "Text2KG: Athlete",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-politician",
+      "name": "Text2KG: Politician",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-company",
+      "name": "Text2KG: Company",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-celestial-body",
+      "name": "Text2KG: Celestial body",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-astronaut",
+      "name": "Text2KG: Astronaut",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-comics-character",
+      "name": "Text2KG: Comics character",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-mean-of-transportation",
+      "name": "Text2KG: Mean of transportation",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-monument",
+      "name": "Text2KG: Monument",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-food",
+      "name": "Text2KG: Food",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-written-work",
+      "name": "Text2KG: Written work",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-sports-team",
+      "name": "Text2KG: Sports team",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-city",
+      "name": "Text2KG: City",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-artist",
+      "name": "Text2KG: Artist",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-scientist",
+      "name": "Text2KG: Scientist",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "text2kg-film",
+      "name": "Text2KG: Film",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "openea-dbp2-ja-en",
+      "name": "OpenEA: DBP2.0 ja_en",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "openea-dbp2-fr-en",
+      "name": "OpenEA: DBP2.0 fr_en",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "openea-dbp2-zh-en",
+      "name": "OpenEA: DBP2.0 zh_en",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "oaei-todo",
+      "name": "OAEI: TODO",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
+    },
+    {
+      "id": "blinkg",
+      "name": "BLINKG",
+      "description": "TODO",
+      "base_tsv": "runs/kgi-bench-movie.tsv",
+      "filter": "allowlist",
+      "pipeline_allowlist": [],
+      "perturb": true
     }
   ]
 }

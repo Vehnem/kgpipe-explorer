@@ -327,6 +327,13 @@ body,
   margin-bottom: 6px;
 }
 
+.task-node-categories {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 3px;
+  margin-top: 4px;
+}
+
 .task-node-actions {
   position: absolute;
   right: 6px;
@@ -2082,20 +2089,27 @@ body.kgpipe-practice-guide.driver-active .leaderboard-practice-actions.driver-ac
   background: #fff;
 }
 
-.results-dataview-textarea {
-  display: block;
+.results-dataview-query .sparql-editor {
   width: 100%;
   box-sizing: border-box;
   margin: 4px 0 10px;
-  resize: vertical;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
-  padding: 8px 10px;
+  overflow: hidden;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
-  line-height: 1.45;
-  color: #0f172a;
-  background: #f8fafc;
+}
+
+.results-dataview-query .sparql-editor .cm-editor {
+  font-size: 12px;
+}
+
+.results-dataview-query .sparql-editor .cm-scroller {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+.results-dataview-query .sparql-editor .cm-content {
+  padding: 6px 0;
 }
 
 .results-dataview-targets {

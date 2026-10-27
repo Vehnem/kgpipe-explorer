@@ -35,6 +35,7 @@ type PipelineNodeData = {
   outputs: string[];
   inputPorts: DataPortSpec[];
   outputPorts: DataPortSpec[];
+  categories?: string[];
   parameterValues?: Record<string, ParameterValue>;
   configSpec?: ConfigSpec | null;
   onConfigure?: () => void;
@@ -231,6 +232,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           outputs: outputPorts.map((p) => p.format),
           inputPorts,
           outputPorts,
+          categories: task?.implements_method ?? [],
           configSpec: task?.config_spec ?? null,
           parameterValues: defaultParameterValues(task?.config_spec),
           onConfigure: () => configureHandlerRef.current(nodeId),
@@ -323,6 +325,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           outputs: outputPorts.map((p) => p.format),
           inputPorts,
           outputPorts,
+          categories: task.implements_method ?? [],
           configSpec: task.config_spec ?? null,
           parameterValues: defaultParameterValues(task.config_spec),
           onConfigure: () => configureHandlerRef.current(id),
@@ -1587,6 +1590,7 @@ function rehydrateBuilderNodes(
         outputs: outputPorts.map((port) => port.format),
         inputPorts,
         outputPorts,
+        categories: task?.implements_method ?? data.categories ?? [],
         configSpec,
         parameterValues: {
           ...defaultParameterValues(configSpec),
@@ -1720,8 +1724,41 @@ function resolveHandleFormat(
   return port ? port.format : null;
 }
 
+const KGPIPE_CATEGORY_NAMESPACES = [
+  "http://github.com/ScaDS/kgpipe/resource/",
+  "http://github.com/ScaDS/kgpipe/ontology/",
+  "http://github.com/ScaDS/kgpipe/"
+];
+
 function taskTypeTags(task: TaskSpec): string[] {
   return task.implements_method ?? [];
+}
+
+/** Shorten a category IRI to `kgo:<local name>` for display on a task node. */
+function prefixedCategory(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.startsWith("kgo:")) return trimmed;
+
+  for (const namespace of KGPIPE_CATEGORY_NAMESPACES) {
+    if (trimmed.startsWith(namespace)) {
+      return `kgo:${categoryLocalName(trimmed.slice(namespace.length))}`;
+    }
+  }
+
+  if (/^[A-Za-z][\w+.-]*:/.test(trimmed) && !trimmed.includes("://")) {
+    return `kgo:${categoryLocalName(trimmed.slice(trimmed.indexOf(":") + 1))}`;
+  }
+
+  return `kgo:${categoryLocalName(trimmed)}`;
+}
+
+function categoryLocalName(value: string): string {
+  const hashIndex = value.lastIndexOf("#");
+  const slashIndex = value.lastIndexOf("/");
+  const splitIndex = Math.max(hashIndex, slashIndex);
+  const name = splitIndex >= 0 ? value.slice(splitIndex + 1) : value;
+  return name || value;
 }
 
 function taskSearchHaystack(task: TaskSpec): string {
@@ -1814,6 +1851,8 @@ function TaskNode({ data, selected }: NodeProps<PipelineNode>) {
       : synthesizePortsFromFormats(data.outputs.length > 0 ? data.outputs : ["any"]);
   const hasConfig = (data.configSpec?.parameters.length ?? 0) > 0;
   const changedParams = changedParameterEntries(data.configSpec, data.parameterValues);
+  const categories = (data.categories ?? []).map((category) => category.trim()).filter(Boolean);
+  const handleTop = categories.length > 0 ? 54 : 34;
 
   return (
     <div
@@ -1822,6 +1861,28 @@ function TaskNode({ data, selected }: NodeProps<PipelineNode>) {
     >
       <div className="task-node-header">
         <div className="task-node-title">{data.label}</div>
+        {categories.length > 0 && (
+          <div className="task-node-categories">
+            {categories.map((category) => {
+              const label = prefixedCategory(category);
+              const color = taskTypeColor(label.slice("kgo:".length));
+              return (
+                <span
+                  key={category}
+                  className="task-type-badge"
+                  title={category}
+                  style={{
+                    backgroundColor: `${color}1a`,
+                    borderColor: color,
+                    color
+                  }}
+                >
+                  {label}
+                </span>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {inputPorts.map((port, idx) => (
@@ -1832,7 +1893,7 @@ function TaskNode({ data, selected }: NodeProps<PipelineNode>) {
           position={Position.Left}
           title={`${port.name} (${port.format})`}
           style={{
-            top: 34 + idx * 16,
+            top: handleTop + idx * 16,
             background: formatColor(port.format),
             border: "2px solid #fff",
             width: 10,
@@ -1849,7 +1910,7 @@ function TaskNode({ data, selected }: NodeProps<PipelineNode>) {
           position={Position.Right}
           title={`${port.name} (${port.format})`}
           style={{
-            top: 34 + idx * 16,
+            top: handleTop + idx * 16,
             background: formatColor(port.format),
             border: "2px solid #fff",
             width: 10,

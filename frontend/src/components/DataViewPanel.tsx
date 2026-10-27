@@ -13,6 +13,7 @@ import {
   saveSparqlExample
 } from "../api";
 import { PipelineName } from "./PipelineName";
+import { SparqlEditor } from "./SparqlEditor";
 import { emitTutorialEvent, TUTORIAL_EVENTS } from "../tutorial/tutorialEvents";
 import {
   buildGraphElementsFromBindings,
@@ -385,13 +386,10 @@ export function DataViewPanel({ pipelines, rows, artifacts, runId }: DataViewPan
         <label htmlFor="results-dataview-query" className="muted" style={{ fontSize: 12 }}>
           Query text
         </label>
-        <textarea
+        <SparqlEditor
           id="results-dataview-query"
-          className="results-dataview-textarea"
           value={queryText}
-          onChange={(e) => setQueryText(e.target.value)}
-          rows={8}
-          spellCheck={false}
+          onChange={setQueryText}
         />
         <div className="results-dataview-targets">
           {targets.map((t, idx) => (

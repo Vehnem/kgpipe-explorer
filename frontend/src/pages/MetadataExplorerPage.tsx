@@ -1,7 +1,3 @@
-import { StreamLanguage } from "@codemirror/language";
-import { sparql } from "@codemirror/legacy-modes/mode/sparql";
-import { EditorView } from "@codemirror/view";
-import CodeMirror from "@uiw/react-codemirror";
 import cytoscape, { type ElementDefinition } from "cytoscape";
 import cola from "cytoscape-cola";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -14,6 +10,12 @@ import {
   type EntityTypeInfo,
   type SavedSparqlExample
 } from "../api";
+import { SparqlEditor } from "../components/SparqlEditor";
+import {
+  getSparqlBindings,
+  getSparqlVars,
+  type SparqlQueryResult
+} from "../utils/sparqlResults";
 
 cytoscape.use(cola);
 
@@ -314,8 +316,15 @@ type ExampleQuery = {
   query: string;
 };
 
+const DEFAULT_EXPLORER_QUERY =
+  "SELECT (COUNT(*) AS ?triples) { GRAPH <http://github.com/ScaDS/kgpipe/> { ?s ?p ?o . } }";
+
 const RDF_TYPE_URI = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const RDFS_LABEL_URI = "http://www.w3.org/2000/01/rdf-schema#label";
+
+function isTripleVarSet(vars: string[]): boolean {
+  return vars.length > 0 && vars.every((name) => name === "s" || name === "p" || name === "o");
+}
 
 function buildEntityOutgoingTriplesFromConstruct(
   result: Record<string, unknown>,
@@ -378,12 +387,6 @@ function buildEntitySummaryFromConstruct(
   const label = labels[0] ?? compactLabel(entityId);
   return { id: entityId, label, typeUris: [...typeUris].sort() };
 }
-
-const SPARQL_EDITOR_EXTENSIONS = [
-  StreamLanguage.define(sparql),
-  EditorView.lineWrapping,
-  EditorView.contentAttributes.of({ id: "graph-query", "aria-label": "Query text" })
-];
 
 const GRAPH_LAYOUT_OPTIONS: Array<{ value: GraphLayoutName; label: string }> = [
   { value: "cose", label: "Force-directed (CoSE)" },
@@ -494,7 +497,7 @@ export function MetadataExplorerPage({
   onSelectedEntityIdChange
 }: MetadataExplorerPageProps) {
   const [query, setQuery] = useState<string>("");
-  const [queryText, setQueryText] = useState<string>("");
+  const [queryText, setQueryText] = useState<string>(DEFAULT_EXPLORER_QUERY);
   const [builtinExamples, setBuiltinExamples] = useState<ExampleQuery[]>([]);
   const [entityTypes, setEntityTypes] = useState<EntityTypeInfo[]>([]);
   const [discoveryQuery, setDiscoveryQuery] = useState<string>("");
@@ -509,6 +512,7 @@ export function MetadataExplorerPage({
     edges: 0
   });
   const [queryTriples, setQueryTriples] = useState<QueryTriple[]>([]);
+  const [queryResult, setQueryResult] = useState<SparqlQueryResult | null>(null);
   const [nodeTypeLegend, setNodeTypeLegend] = useState<NodeTypeLegendItem[]>([]);
   const [graphLayout, setGraphLayout] = useState<GraphLayoutName>("cose");
   const [dynamicForceLayout, setDynamicForceLayout] = useState<boolean>(false);
@@ -820,21 +824,41 @@ export function MetadataExplorerPage({
     setQueryStatus("");
     setDetailViewMode("queryTable");
     try {
-      const result = await constructSparql(queryText);
-      const { elements, stats, triples, typeLegend } = buildGraphFromResult(result);
+      const result = (await constructSparql(queryText)) as SparqlQueryResult;
+      const { elements, stats, triples, typeLegend } = buildGraphFromResult(
+        result as Record<string, unknown>
+      );
       setGraphElements(elements);
       setGraphStats(stats);
       setQueryTriples(triples);
       setNodeTypeLegend(typeLegend);
-      setQueryStatus(
-        stats.triples
-          ? `Query completed. Parsed ${stats.triples} triples into ${stats.nodes} nodes and ${stats.edges} edges.`
-          : "Query completed but no graph triples were found in s/p/o bindings."
-      );
+      setQueryResult(result);
+
+      const bindings = getSparqlBindings(result);
+      const vars = getSparqlVars(result);
+      if (typeof result.boolean === "boolean" && bindings.length === 0) {
+        setQueryStatus(`Query completed. ASK result is ${result.boolean ? "true" : "false"}.`);
+      } else if (isTripleVarSet(vars)) {
+        setQueryStatus(
+          stats.triples
+            ? `Query completed. Parsed ${stats.triples} triples into ${stats.nodes} nodes and ${stats.edges} edges.`
+            : "Query completed with no triples."
+        );
+      } else if (bindings.length) {
+        const rows = `${bindings.length} row${bindings.length === 1 ? "" : "s"}`;
+        setQueryStatus(
+          stats.triples
+            ? `Query completed. ${rows}. Parsed ${stats.triples} triples into ${stats.nodes} nodes and ${stats.edges} edges.`
+            : `Query completed. ${rows}.`
+        );
+      } else {
+        setQueryStatus("Query completed with no rows.");
+      }
     } catch (error) {
       setGraphElements([]);
       setGraphStats({ triples: 0, nodes: 0, edges: 0 });
       setQueryTriples([]);
+      setQueryResult(null);
       setNodeTypeLegend([]);
       const message =
         error instanceof Error ? error.message : "Unknown error while running query.";
@@ -959,14 +983,7 @@ export function MetadataExplorerPage({
           </select>
           {savedExamplesStatus ? <p className="muted">Saved examples: {savedExamplesStatus}</p> : null}
           <label htmlFor="graph-query">Query text</label>
-          <CodeMirror
-            className="sparql-editor"
-            value={queryText}
-            height="180px"
-            extensions={SPARQL_EDITOR_EXTENSIONS}
-            basicSetup={{ lineNumbers: true, foldGutter: false }}
-            onChange={setQueryText}
-          />
+          <SparqlEditor id="graph-query" value={queryText} onChange={setQueryText} />
           <div className="query-actions">
             <button type="button" onClick={handleRunQuery} disabled={queryRunning}>
               {queryRunning ? "Running..." : "Run Query"}
@@ -1175,56 +1192,18 @@ export function MetadataExplorerPage({
             )
           ) : detailViewMode === "queryTable" ? (
             <>
-              <h3>Construct Query Result</h3>
-              {queryTriples.length ? (
-                <div style={{ overflowX: "auto" }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Subject</th>
-                        <th>Predicate</th>
-                        <th>Object</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {queryTriples.map((triple, index) => (
-                        <tr
-                          key={`${triple.s.value}|${triple.p.value}|${triple.o.value}|${index}`}
-                        >
-                          <td>
-                            <QueryTermCell
-                              term={triple.s}
-                              onSelectEntity={(entityId) => {
-                                onSelectedEntityIdChange(entityId);
-                                setDetailViewMode("entity");
-                              }}
-                            />
-                          </td>
-                          <td>
-                            <QueryTermCell
-                              term={triple.p}
-                              onSelectEntity={(entityId) => {
-                                onSelectedEntityIdChange(entityId);
-                                setDetailViewMode("entity");
-                              }}
-                            />
-                          </td>
-                          <td>
-                            <QueryTermCell
-                              term={triple.o}
-                              onSelectEntity={(entityId) => {
-                                onSelectedEntityIdChange(entityId);
-                                setDetailViewMode("entity");
-                              }}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              <h3>Query Result</h3>
+              {queryResult ? (
+                <QueryResultBody
+                  result={queryResult}
+                  triples={queryTriples}
+                  onSelectEntity={(entityId) => {
+                    onSelectedEntityIdChange(entityId);
+                    setDetailViewMode("entity");
+                  }}
+                />
               ) : (
-                <p>Run a CONSTRUCT query to populate the result table.</p>
+                <p>Run a SPARQL query to populate the result table.</p>
               )}
             </>
           ) : (
@@ -1311,7 +1290,11 @@ export function MetadataExplorerPage({
                 ) : null}
                 {!graphElements.length ? (
                   <div className="graph-empty-state">
-                    <p>Run a SPARQL query to render graph results.</p>
+                    <p>
+                      {queryResult && getSparqlBindings(queryResult).length > 0
+                        ? "Graph view needs subject, predicate, and object bindings (s, p, and o). These rows are in the query result table."
+                        : "Run a SPARQL query to render graph results."}
+                    </p>
                   </div>
                 ) : null}
               </div>
@@ -1324,6 +1307,88 @@ export function MetadataExplorerPage({
         </article>
       </div>
     </section>
+  );
+}
+
+type QueryResultBodyProps = {
+  result: SparqlQueryResult;
+  triples: QueryTriple[];
+  onSelectEntity: (entityId: string) => void;
+};
+
+function QueryResultBody({ result, triples, onSelectEntity }: QueryResultBodyProps) {
+  const bindings = getSparqlBindings(result);
+  const vars = getSparqlVars(result);
+
+  if (typeof result.boolean === "boolean" && bindings.length === 0) {
+    return <p>ASK result: {result.boolean ? "true" : "false"}</p>;
+  }
+
+  if (bindings.length === 0) {
+    return <p>Query returned no rows.</p>;
+  }
+
+  if (isTripleVarSet(vars) && triples.length > 0) {
+    return (
+      <div style={{ overflowX: "auto" }}>
+        <table>
+          <thead>
+            <tr>
+              <th>Subject</th>
+              <th>Predicate</th>
+              <th>Object</th>
+            </tr>
+          </thead>
+          <tbody>
+            {triples.map((triple, index) => (
+              <tr key={`${triple.s.value}|${triple.p.value}|${triple.o.value}|${index}`}>
+                <td>
+                  <QueryTermCell term={triple.s} onSelectEntity={onSelectEntity} />
+                </td>
+                <td>
+                  <QueryTermCell term={triple.p} onSelectEntity={onSelectEntity} />
+                </td>
+                <td>
+                  <QueryTermCell term={triple.o} onSelectEntity={onSelectEntity} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table>
+        <thead>
+          <tr>
+            {vars.map((column) => (
+              <th key={column}>{column}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {bindings.map((row, index) => (
+            <tr key={index}>
+              {vars.map((column) => {
+                const term = row[column];
+                return (
+                  <td key={column}>
+                    {isSparqlTerm(term) ? (
+                      <QueryTermCell term={term} onSelectEntity={onSelectEntity} />
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

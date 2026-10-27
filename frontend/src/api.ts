@@ -222,7 +222,12 @@ export async function constructSparql(
     body: JSON.stringify({ query })
   });
   if (!res.ok) {
-    throw new Error(`Failed to run SPARQL construct (${res.status})`);
+    const detail = await res.text();
+    throw new Error(
+      detail
+        ? `Failed to run SPARQL query (${res.status}): ${detail}`
+        : `Failed to run SPARQL query (${res.status})`
+    );
   }
   return (await res.json()) as SparqlConstructResponse;
 }
