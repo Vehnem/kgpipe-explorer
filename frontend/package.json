@@ -9,6 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/legacy-modes": "^6.5.5",
+    "@codemirror/view": "^6.43.15",
+    "@uiw/react-codemirror": "^4.25.12",
     "@xyflow/react": "^12.8.4",
     "cytoscape": "^3.33.1",
     "cytoscape-cola": "^2.5.1",

@@ -1,3 +1,7 @@
+import { StreamLanguage } from "@codemirror/language";
+import { sparql } from "@codemirror/legacy-modes/mode/sparql";
+import { EditorView } from "@codemirror/view";
+import CodeMirror from "@uiw/react-codemirror";
 import cytoscape, { type ElementDefinition } from "cytoscape";
 import cola from "cytoscape-cola";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -37,7 +41,7 @@ type NodeTypeLegendItem = {
 };
 
 type GraphLayoutName = "cose" | "breadthfirst" | "circle" | "grid" | "concentric";
-type DetailViewMode = "entity" | "queryTable";
+type DetailViewMode = "entity" | "queryTable" | "graph";
 
 type QueryTerm = {
   value: string;
@@ -375,6 +379,12 @@ function buildEntitySummaryFromConstruct(
   return { id: entityId, label, typeUris: [...typeUris].sort() };
 }
 
+const SPARQL_EDITOR_EXTENSIONS = [
+  StreamLanguage.define(sparql),
+  EditorView.lineWrapping,
+  EditorView.contentAttributes.of({ id: "graph-query", "aria-label": "Query text" })
+];
+
 const GRAPH_LAYOUT_OPTIONS: Array<{ value: GraphLayoutName; label: string }> = [
   { value: "cose", label: "Force-directed (CoSE)" },
   { value: "breadthfirst", label: "Breadthfirst" },
@@ -493,7 +503,6 @@ export function MetadataExplorerPage({
   const [savedExamples, setSavedExamples] = useState<SavedSparqlExample[]>([]);
   const [savedExamplesStatus, setSavedExamplesStatus] = useState<string>("");
   const [graphElements, setGraphElements] = useState<ElementDefinition[]>([]);
-  const [graphHeight, setGraphHeight] = useState<number>(420);
   const [graphStats, setGraphStats] = useState<GraphStats>({
     triples: 0,
     nodes: 0,
@@ -503,6 +512,7 @@ export function MetadataExplorerPage({
   const [nodeTypeLegend, setNodeTypeLegend] = useState<NodeTypeLegendItem[]>([]);
   const [graphLayout, setGraphLayout] = useState<GraphLayoutName>("cose");
   const [dynamicForceLayout, setDynamicForceLayout] = useState<boolean>(false);
+  const [graphMaximized, setGraphMaximized] = useState<boolean>(false);
   const [detailViewMode, setDetailViewMode] = useState<DetailViewMode>("entity");
   const [entityTypeFilter, setEntityTypeFilter] = useState<EntityTypeFilter>("all");
   const [entities, setEntities] = useState<ExplorerEntity[]>([]);
@@ -516,6 +526,8 @@ export function MetadataExplorerPage({
   const graphContainerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
   const activeLayoutRef = useRef<cytoscape.Layouts | null>(null);
+  const onSelectedEntityIdChangeRef = useRef(onSelectedEntityIdChange);
+  onSelectedEntityIdChangeRef.current = onSelectedEntityIdChange;
 
   useEffect(() => {
     let cancelled = false;
@@ -660,9 +672,11 @@ export function MetadataExplorerPage({
   }, [selectedEntityId]);
 
   useEffect(() => {
-    if (!graphContainerRef.current) return;
+    if (detailViewMode !== "graph") return;
+    const container = graphContainerRef.current;
+    if (!container) return;
     const cy = cytoscape({
-      container: graphContainerRef.current,
+      container,
       elements: [],
       style: [
         {
@@ -695,95 +709,116 @@ export function MetadataExplorerPage({
       ]
     });
 
-    cyRef.current = cy;
-    return () => {
-      cy.destroy();
-      cyRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-
     const onTapNode = (event: cytoscape.EventObject) => {
       const node = event.target as cytoscape.NodeSingular;
       const termType = node.data("termType") as unknown;
       const value = node.data("value") as unknown;
       if (termType !== "uri" || typeof value !== "string" || !value) return;
-      onSelectedEntityIdChange(value);
+      onSelectedEntityIdChangeRef.current(value);
       setDetailViewMode("entity");
     };
 
     cy.on("tap", "node", onTapNode);
+    cyRef.current = cy;
     return () => {
-      cy.off("tap", "node", onTapNode);
+      activeLayoutRef.current?.stop();
+      cy.destroy();
+      cyRef.current = null;
     };
-  }, [onSelectedEntityIdChange]);
+  }, [detailViewMode]);
 
   useEffect(() => {
+    if (detailViewMode !== "graph") return;
     const cy = cyRef.current;
     if (!cy) return;
-    activeLayoutRef.current?.stop();
-    cy.nodes().unlock();
-    cy.elements().remove();
-    if (!graphElements.length) return;
-    cy.add(graphElements);
 
-    const common = { fit: true, padding: 24 };
-    let layoutOpts: cytoscape.LayoutOptions;
+    const frame = window.requestAnimationFrame(() => {
+      activeLayoutRef.current?.stop();
+      cy.resize();
+      cy.nodes().unlock();
+      cy.elements().remove();
+      if (!graphElements.length) return;
+      cy.add(graphElements);
 
-    if (graphLayout === "cose") {
-      if (dynamicForceLayout) {
-        layoutOpts = {
-          ...common,
-          name: "cola",
-          animate: true,
-          infinite: true,
-          randomize: true,
-          avoidOverlap: true,
-          edgeLength: 160,
-          nodeSpacing: 35
-        } as cytoscape.LayoutOptions;
+      const common = { fit: true, padding: 24 };
+      let layoutOpts: cytoscape.LayoutOptions;
+
+      if (graphLayout === "cose") {
+        if (dynamicForceLayout) {
+          layoutOpts = {
+            ...common,
+            name: "cola",
+            animate: true,
+            infinite: true,
+            randomize: true,
+            avoidOverlap: true,
+            edgeLength: 160,
+            nodeSpacing: 35
+          } as cytoscape.LayoutOptions;
+        } else {
+          layoutOpts = {
+            ...common,
+            name: "cose",
+            animate: false,
+            randomize: true,
+            nodeRepulsion: 400000,
+            idealEdgeLength: 100,
+            gravity: 0.25,
+            numIter: 1000
+          };
+        }
+      } else if (graphLayout === "breadthfirst") {
+        layoutOpts = { ...common, name: "breadthfirst", animate: false, directed: true, spacingFactor: 1.1 };
+      } else if (graphLayout === "circle") {
+        layoutOpts = { ...common, name: "circle", animate: false, spacingFactor: 1.15 };
+      } else if (graphLayout === "grid") {
+        layoutOpts = { ...common, name: "grid", animate: false, avoidOverlap: true, condense: false };
       } else {
-        layoutOpts = {
-          ...common,
-          name: "cose",
-          animate: false,
-          randomize: true,
-          nodeRepulsion: 400000,
-          idealEdgeLength: 100,
-          gravity: 0.25,
-          numIter: 1000
-        };
+        layoutOpts = { ...common, name: "concentric", animate: false, minNodeSpacing: 30, spacingFactor: 1.1 };
       }
-    } else if (graphLayout === "breadthfirst") {
-      layoutOpts = { ...common, name: "breadthfirst", animate: false, directed: true, spacingFactor: 1.1 };
-    } else if (graphLayout === "circle") {
-      layoutOpts = { ...common, name: "circle", animate: false, spacingFactor: 1.15 };
-    } else if (graphLayout === "grid") {
-      layoutOpts = { ...common, name: "grid", animate: false, avoidOverlap: true, condense: false };
-    } else {
-      layoutOpts = { ...common, name: "concentric", animate: false, minNodeSpacing: 30, spacingFactor: 1.1 };
-    }
 
-    const layout = cy.layout(layoutOpts);
-    activeLayoutRef.current = layout;
-    layout.run();
-  }, [dynamicForceLayout, graphElements, graphLayout]);
+      const layout = cy.layout(layoutOpts);
+      activeLayoutRef.current = layout;
+      layout.run();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      activeLayoutRef.current?.stop();
+    };
+  }, [detailViewMode, dynamicForceLayout, graphElements, graphLayout]);
 
   useEffect(() => {
+    if (detailViewMode !== "graph") return;
     const cy = cyRef.current;
     if (!cy) return;
-    cy.resize();
-    if (graphElements.length) {
-      cy.fit(undefined, 24);
-    }
-  }, [graphElements.length, graphHeight, leftColumnWidth]);
+    const frame = window.requestAnimationFrame(() => {
+      cy.resize();
+      if (graphElements.length) {
+        cy.fit(undefined, 24);
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [detailViewMode, graphElements.length, graphMaximized, leftColumnWidth]);
+
+  useEffect(() => {
+    if (detailViewMode === "graph") return;
+    setGraphMaximized(false);
+  }, [detailViewMode]);
+
+  useEffect(() => {
+    if (!graphMaximized) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setGraphMaximized(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [graphMaximized]);
 
   async function handleRunQuery() {
     setQueryRunning(true);
     setQueryStatus("");
+    setDetailViewMode("queryTable");
     try {
       const result = await constructSparql(queryText);
       const { elements, stats, triples, typeLegend } = buildGraphFromResult(result);
@@ -873,7 +908,7 @@ export function MetadataExplorerPage({
   }
 
   return (
-    <section className="page-scaffold">
+    <section className={`page-scaffold metadata-explorer-page${graphMaximized ? " is-graph-maximized" : ""}`}>
       <header className="page-header">
         <h2>Metadata Explorer</h2>
         <p>
@@ -884,10 +919,10 @@ export function MetadataExplorerPage({
 
       <div
         ref={gridRef}
-        className={`metadata-explorer-grid${isResizingColumns ? " is-resizing" : ""}`}
+        className={`metadata-explorer-grid${isResizingColumns ? " is-resizing" : ""}${graphMaximized ? " is-graph-maximized" : ""}`}
         style={{ gridTemplateColumns: `${leftColumnWidth}px 8px minmax(0, 1fr)` }}
       >
-        <section className="query-panel" data-tutorial="explorer-query" style={{ gridColumn: 1, gridRow: 1 }}>
+        <section className="query-panel" data-tutorial="explorer-query" style={{ gridColumn: "1 / -1", gridRow: 1 }}>
           <h3>SPARQL Query</h3>
           <label htmlFor="example-query-select">Example queries</label>
           <select
@@ -924,13 +959,15 @@ export function MetadataExplorerPage({
           </select>
           {savedExamplesStatus ? <p className="muted">Saved examples: {savedExamplesStatus}</p> : null}
           <label htmlFor="graph-query">Query text</label>
-          <textarea
-            id="graph-query"
+          <CodeMirror
+            className="sparql-editor"
             value={queryText}
-            onChange={(event) => setQueryText(event.target.value)}
-            rows={9}
+            height="180px"
+            extensions={SPARQL_EDITOR_EXTENSIONS}
+            basicSetup={{ lineNumbers: true, foldGutter: false }}
+            onChange={setQueryText}
           />
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          <div className="query-actions">
             <button type="button" onClick={handleRunQuery} disabled={queryRunning}>
               {queryRunning ? "Running..." : "Run Query"}
             </button>
@@ -939,112 +976,6 @@ export function MetadataExplorerPage({
             </button>
           </div>
           {queryStatus ? <p>{queryStatus}</p> : null}
-        </section>
-
-        <div
-          className="metadata-grid-resizer"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize query and graph panels"
-          onPointerDown={startColumnResize}
-          style={{ gridColumn: 2, gridRow: "1 / span 2" }}
-        />
-
-        <section className="graph-panel" data-tutorial="explorer-graph" style={{ gridColumn: 3, gridRow: 1 }}>
-          <h3>Graph</h3>
-          <label htmlFor="graph-layout-select">Layout</label>
-          <select
-            id="graph-layout-select"
-            value={graphLayout}
-            onChange={(event) => setGraphLayout(event.target.value as GraphLayoutName)}
-          >
-            {GRAPH_LAYOUT_OPTIONS.map((layout) => (
-              <option key={layout.value} value={layout.value}>
-                {layout.label}
-              </option>
-            ))}
-          </select>
-          {graphLayout === "cose" ? (
-            <label>
-              <input
-                type="checkbox"
-                checked={dynamicForceLayout}
-                onChange={(event) => setDynamicForceLayout(event.target.checked)}
-              />{" "}
-              Dynamic force layout
-            </label>
-          ) : null}
-          <label htmlFor="graph-height">
-            Graph height{" "}
-            <span className="muted" style={{ marginLeft: 6 }}>
-              {Math.round(graphHeight)}px
-            </span>
-          </label>
-          <input
-            id="graph-height"
-            type="range"
-            min={260}
-            max={900}
-            step={10}
-            value={graphHeight}
-            onChange={(event) => setGraphHeight(Number(event.target.value))}
-          />
-          <div className="graph-canvas-placeholder" style={{ height: graphHeight, position: "relative" }}>
-            <div ref={graphContainerRef} className="graph-canvas" />
-            {nodeTypeLegend.length ? (
-              <aside
-                aria-label="Node type legend"
-                style={{
-                  position: "absolute",
-                  top: 10,
-                  right: 10,
-                  width: 240,
-                  maxHeight: Math.max(120, graphHeight - 20),
-                  overflow: "auto",
-                  background: "rgba(255,255,255,0.92)",
-                  border: "1px solid rgba(148,163,184,0.65)",
-                  borderRadius: 10,
-                  padding: "10px 10px 8px 10px",
-                  boxShadow: "0 8px 18px rgba(15,23,42,0.10)"
-                }}
-              >
-                <div style={{ fontSize: 12, fontWeight: 650, marginBottom: 8 }}>rdf:type</div>
-                <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
-                  {nodeTypeLegend.map((item) => (
-                    <li
-                      key={item.typeUri}
-                      title={item.typeUri}
-                      style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
-                    >
-                      <span
-                        aria-hidden="true"
-                        style={{
-                          width: 12,
-                          height: 12,
-                          borderRadius: 4,
-                          background: item.color,
-                          border: "1px solid rgba(15,23,42,0.22)",
-                          flex: "0 0 auto"
-                        }}
-                      />
-                      <span style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {item.label} <span className="muted">({item.count})</span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </aside>
-            ) : null}
-            {!graphElements.length ? (
-              <div className="graph-empty-state">
-                <p>Run a SPARQL query to render graph results.</p>
-              </div>
-            ) : null}
-          </div>
-          <p>
-            Triples: {graphStats.triples} {" · "} Nodes: {graphStats.nodes} {" · "} Edges:{" "}
-            {graphStats.edges}
-          </p>
         </section>
 
         <aside className="explorer-sidebar" data-tutorial="explorer-entities" style={{ gridColumn: 1, gridRow: 2 }}>
@@ -1102,7 +1033,20 @@ export function MetadataExplorerPage({
           ))}
         </aside>
 
-        <article className="explorer-detail" data-tutorial="explorer-detail" style={{ gridColumn: 3, gridRow: 2 }}>
+        <div
+          className="metadata-grid-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize columns"
+          onPointerDown={startColumnResize}
+          style={{ gridColumn: 2, gridRow: 2 }}
+        />
+
+        <article
+          className={`explorer-detail${detailViewMode === "graph" ? " is-graph-view" : ""}`}
+          data-tutorial="explorer-detail"
+          style={graphMaximized ? { gridColumn: "1 / -1", gridRow: "1 / -1" } : { gridColumn: 3, gridRow: 2 }}
+        >
           <nav className="page-tabs" aria-label="Detail view switch">
             <button
               type="button"
@@ -1117,6 +1061,14 @@ export function MetadataExplorerPage({
               onClick={() => setDetailViewMode("queryTable")}
             >
               Query result table
+            </button>
+            <button
+              type="button"
+              data-tutorial="explorer-graph"
+              className={detailViewMode === "graph" ? "active" : ""}
+              onClick={() => setDetailViewMode("graph")}
+            >
+              Graph view
             </button>
           </nav>
 
@@ -1221,7 +1173,7 @@ export function MetadataExplorerPage({
             ) : (
               <p>Select an entity to inspect details.</p>
             )
-          ) : (
+          ) : detailViewMode === "queryTable" ? (
             <>
               <h3>Construct Query Result</h3>
               {queryTriples.length ? (
@@ -1275,6 +1227,99 @@ export function MetadataExplorerPage({
                 <p>Run a CONSTRUCT query to populate the result table.</p>
               )}
             </>
+          ) : (
+            <div className="graph-tab">
+              <div className="graph-toolbar">
+                <label htmlFor="graph-layout-select">
+                  Layout
+                  <select
+                    id="graph-layout-select"
+                    value={graphLayout}
+                    onChange={(event) => setGraphLayout(event.target.value as GraphLayoutName)}
+                  >
+                    {GRAPH_LAYOUT_OPTIONS.map((layout) => (
+                      <option key={layout.value} value={layout.value}>
+                        {layout.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {graphLayout === "cose" ? (
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={dynamicForceLayout}
+                      onChange={(event) => setDynamicForceLayout(event.target.checked)}
+                    />
+                    Dynamic force layout
+                  </label>
+                ) : null}
+                <button
+                  type="button"
+                  className="graph-maximize-btn"
+                  aria-pressed={graphMaximized}
+                  onClick={() => setGraphMaximized((current) => !current)}
+                >
+                  {graphMaximized ? "Restore" : "Maximize"}
+                </button>
+              </div>
+              <div className="graph-canvas-placeholder">
+                <div ref={graphContainerRef} className="graph-canvas" />
+                {nodeTypeLegend.length ? (
+                  <aside
+                    aria-label="Node type legend"
+                    style={{
+                      position: "absolute",
+                      top: 10,
+                      right: 10,
+                      width: 240,
+                      maxHeight: "calc(100% - 20px)",
+                      overflow: "auto",
+                      background: "rgba(255,255,255,0.92)",
+                      border: "1px solid rgba(148,163,184,0.65)",
+                      borderRadius: 10,
+                      padding: "10px 10px 8px 10px",
+                      boxShadow: "0 8px 18px rgba(15,23,42,0.10)"
+                    }}
+                  >
+                    <div style={{ fontSize: 12, fontWeight: 650, marginBottom: 8 }}>rdf:type</div>
+                    <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
+                      {nodeTypeLegend.map((item) => (
+                        <li
+                          key={item.typeUri}
+                          title={item.typeUri}
+                          style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
+                        >
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              width: 12,
+                              height: 12,
+                              borderRadius: 4,
+                              background: item.color,
+                              border: "1px solid rgba(15,23,42,0.22)",
+                              flex: "0 0 auto"
+                            }}
+                          />
+                          <span style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {item.label} <span className="muted">({item.count})</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </aside>
+                ) : null}
+                {!graphElements.length ? (
+                  <div className="graph-empty-state">
+                    <p>Run a SPARQL query to render graph results.</p>
+                  </div>
+                ) : null}
+              </div>
+              <p className="graph-stats">
+                Triples: {graphStats.triples} {" · "} Nodes: {graphStats.nodes} {" · "} Edges:{" "}
+                {graphStats.edges}
+              </p>
+            </div>
           )}
         </article>
       </div>

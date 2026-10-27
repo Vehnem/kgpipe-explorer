@@ -84,6 +84,8 @@ export type ArtifactFile = {
 export type StageArtifacts = {
   files: ArtifactFile[];
   tmp_count: number;
+  /** Uncompressed size of intermediate files. The zip download is smaller. */
+  tmp_bytes?: number;
 };
 
 /** { pipeline_id: { stage_id: StageArtifacts } } */
@@ -332,6 +334,32 @@ export async function fetchResultsArtifacts(runId?: string): Promise<ResultsArti
     throw new Error(`Failed to fetch results artifacts (${res.status})`);
   }
   return (await res.json()) as ResultsArtifacts;
+}
+
+export function resultsArtifactFileUrl(
+  pipeline: string,
+  stage: string,
+  name: string,
+  runId?: string
+): string {
+  const url = new URL(`${API_BASE}/results/artifacts/file`);
+  url.searchParams.set("pipeline", pipeline);
+  url.searchParams.set("stage", stage);
+  url.searchParams.set("name", name);
+  if (runId) {
+    url.searchParams.set("run_id", runId);
+  }
+  return url.toString();
+}
+
+export function resultsTmpZipUrl(pipeline: string, stage: string, runId?: string): string {
+  const url = new URL(`${API_BASE}/results/artifacts/tmp.zip`);
+  url.searchParams.set("pipeline", pipeline);
+  url.searchParams.set("stage", stage);
+  if (runId) {
+    url.searchParams.set("run_id", runId);
+  }
+  return url.toString();
 }
 
 export async function fetchResultsTmpArtifacts(

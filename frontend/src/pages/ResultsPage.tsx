@@ -4,7 +4,9 @@ import {
   fetchBenchmarkRuns,
   fetchLeaderboardRunsTsv,
   fetchResultsArtifacts,
-  fetchResultsTmpArtifacts
+  fetchResultsTmpArtifacts,
+  resultsArtifactFileUrl,
+  resultsTmpZipUrl
 } from "../api";
 import { DataViewPanel } from "../components/DataViewPanel";
 import { PipelineName } from "../components/PipelineName";
@@ -206,9 +208,9 @@ function mimeIcon(mimeType: string): string {
   return "□";
 }
 
-type ArtifactRowProps = { file: ArtifactFile };
+type ArtifactRowProps = { file: ArtifactFile; downloadUrl?: string };
 
-function ArtifactRow({ file }: ArtifactRowProps) {
+function ArtifactRow({ file, downloadUrl }: ArtifactRowProps) {
   return (
     <div className="results-artifact-file">
       <span className="results-artifact-icon" title={file.mime_type}>
@@ -219,6 +221,11 @@ function ArtifactRow({ file }: ArtifactRowProps) {
         <span className="muted" style={{ fontSize: 11 }}>{file.description}</span>
       </div>
       <span className="results-artifact-size">{formatBytes(file.size_bytes)}</span>
+      {downloadUrl ? (
+        <a className="results-artifact-download" href={downloadUrl} download={file.name}>
+          Download
+        </a>
+      ) : null}
       <span className="results-artifact-path" title={file.path}>{file.path}</span>
     </div>
   );
@@ -291,21 +298,43 @@ function StageArtifactsSection({
       ) : (
         <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
           {files.map((file) => (
-            <ArtifactRow key={file.path} file={file} />
+            <ArtifactRow
+              key={file.path}
+              file={file}
+              downloadUrl={resultsArtifactFileUrl(pipeline, stage, file.name, runId)}
+            />
           ))}
           {tmpCount > 0 ? (
             <div className="results-artifact-tmp">
-              <button
-                type="button"
-                className="results-artifact-tmp-toggle"
-                aria-expanded={tmpExpanded}
-                onClick={() => void handleToggleTmp()}
-              >
-                {tmpExpanded
-                  ? "Hide intermediate files"
-                  : `Show ${tmpCount} intermediate file${tmpCount === 1 ? "" : "s"}`}
-                {tmpLoading ? "…" : ""}
-              </button>
+              <div className="results-artifact-tmp-actions">
+                <button
+                  type="button"
+                  className="results-artifact-tmp-toggle"
+                  aria-expanded={tmpExpanded}
+                  onClick={() => void handleToggleTmp()}
+                >
+                  {tmpExpanded
+                    ? "Hide intermediate files"
+                    : `Show ${tmpCount} intermediate file${tmpCount === 1 ? "" : "s"}`}
+                  {tmpLoading ? "…" : ""}
+                </button>
+                <a
+                  className="results-artifact-zip"
+                  href={resultsTmpZipUrl(pipeline, stage, runId)}
+                  title={
+                    group?.tmp_bytes
+                      ? `Zipped while downloading. Uncompressed size is ${formatBytes(group.tmp_bytes)}; the archive is usually several times smaller.`
+                      : "Zipped while downloading."
+                  }
+                >
+                  Download .zip
+                  {group?.tmp_bytes ? (
+                    <span className="results-artifact-zip-size">
+                      {formatBytes(group.tmp_bytes)} uncompressed
+                    </span>
+                  ) : null}
+                </a>
+              </div>
               {tmpExpanded ? (
                 <div className="results-artifact-tmp-list">
                   {tmpError ? (
@@ -704,7 +733,8 @@ export function ResultsPage({ tasks: _tasks }: ResultsPageProps) {
           {dataTab === "artifacts" ? (
             <>
               <p className="muted" style={{ marginBottom: 8, fontSize: 12 }}>
-                Output files and run artifacts per stage
+                Output files and run artifacts per stage. Main files download directly;
+                intermediate files download together as a zip.
               </p>
               <ArtifactsPanel
                 pipelines={selectedPipelines}

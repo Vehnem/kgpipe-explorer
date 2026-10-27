@@ -467,6 +467,16 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
     setSelectedEdgeId(null);
   }
 
+  function clearCanvas() {
+    setNodes([]);
+    setEdges([]);
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setConfiguringNodeId(null);
+    setSelectedExampleId("");
+    setConnectionError("");
+  }
+
   function nodeLabel(node: AnyNode): string {
     return node.data.label;
   }
@@ -776,6 +786,19 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         >
           Remove Selected Connection
         </button>
+        <button
+          type="button"
+          className="danger-btn"
+          onClick={clearCanvas}
+          disabled={nodes.length === 0 && edges.length === 0}
+          title={
+            nodes.length === 0 && edges.length === 0
+              ? "The canvas is already empty"
+              : "Remove every node and connection from the canvas"
+          }
+        >
+          Clear Nodes and Edges
+        </button>
         <p className="builder-connect-hint">
           {selectedEdgeId
             ? (() => {
@@ -918,11 +941,14 @@ function PipelineExportModal({ nodes, edges, onClose }: PipelineExportModalProps
     "Pipeline exported from KGpipe Pipeline Editor"
   );
   const [format, setFormat] = useState<ExportFormat>("yaml");
+  const [sourceFile, setSourceFile] = useState("SOURCE_FILE");
+  const [seedKg, setSeedKg] = useState("SEED_KG");
+  const [ontology, setOntology] = useState("ONTOLOGY");
   const [copyHint, setCopyHint] = useState("");
 
   const pipelineConf = useMemo(
-    () => buildPipelineConf(pipelineName, description, exportOrder.taskNames),
-    [pipelineName, description, exportOrder.taskNames]
+    () => buildPipelineConf(pipelineName, description, exportOrder.tasks),
+    [pipelineName, description, exportOrder.tasks]
   );
 
   const configText = useMemo(
@@ -931,8 +957,13 @@ function PipelineExportModal({ nodes, edges, onClose }: PipelineExportModalProps
   );
 
   const cliCommand = useMemo(
-    () => buildCliCommand(pipelineName),
-    [pipelineName]
+    () =>
+      buildCliCommand(pipelineName, {
+        sourceFile,
+        seedKg,
+        ontology
+      }),
+    [pipelineName, sourceFile, seedKg, ontology]
   );
 
   useEffect(() => {
@@ -991,6 +1022,36 @@ function PipelineExportModal({ nodes, edges, onClose }: PipelineExportModalProps
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Pipeline exported from KGpipe Pipeline Editor"
+              />
+            </label>
+            <label className="export-field">
+              <span>Input</span>
+              <input
+                type="text"
+                value={sourceFile}
+                onChange={(e) => setSourceFile(e.target.value)}
+                placeholder="SOURCE_FILE"
+                spellCheck={false}
+              />
+            </label>
+            <label className="export-field">
+              <span>Target</span>
+              <input
+                type="text"
+                value={seedKg}
+                onChange={(e) => setSeedKg(e.target.value)}
+                placeholder="SEED_KG"
+                spellCheck={false}
+              />
+            </label>
+            <label className="export-field">
+              <span>Ontology (optional)</span>
+              <input
+                type="text"
+                value={ontology}
+                onChange={(e) => setOntology(e.target.value)}
+                placeholder="ONTOLOGY"
+                spellCheck={false}
               />
             </label>
           </div>
@@ -1059,8 +1120,9 @@ function PipelineExportModal({ nodes, edges, onClose }: PipelineExportModalProps
               >
                 See run &amp; reimport
               </a>
-              . The CLI line below is a mock preview — <code>kgpipe run</code> is
-              not wired here.
+              . <code>kgpipe run</code> accepts <code>--input</code> for the source
+              file, <code>--target</code> for the seed KG, and an optional{" "}
+              <code>--ontology</code>.
             </p>
             <pre className="export-code-block export-code-block--cli">{cliCommand}</pre>
           </div>
@@ -1068,7 +1130,7 @@ function PipelineExportModal({ nodes, edges, onClose }: PipelineExportModalProps
           {copyHint ? <p className="export-copy-hint">{copyHint}</p> : null}
         </div>
 
-        <div className="modal-footer">
+        <div className="modal-footer modal-footer--start">
           <button type="button" onClick={onClose}>
             Close
           </button>
