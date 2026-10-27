@@ -258,12 +258,12 @@ def conf_to_example_pipeline(pipeline_id: str, description: str, task_names: lis
 
 
 def convert_catalog(conf_path: Path) -> list[dict[str, Any]]:
-    from kgpipe.generation.loaders import load_pipeline_catalog
+    from kgpipe.generation.loaders import load_pipeline_catalog, pipeline_task_names
 
     _ensure_tasks_registered()
     catalog = load_pipeline_catalog(conf_path)
     return [
-        conf_to_example_pipeline(pid, entry.description, list(entry.tasks))
+        conf_to_example_pipeline(pid, entry.description, pipeline_task_names(entry))
         for pid, entry in catalog.root.items()
     ]
 

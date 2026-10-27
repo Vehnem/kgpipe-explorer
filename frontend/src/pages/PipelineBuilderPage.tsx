@@ -35,6 +35,7 @@ type PipelineNodeData = {
   outputs: string[];
   inputPorts: DataPortSpec[];
   outputPorts: DataPortSpec[];
+  categories?: string[];
   parameterValues?: Record<string, ParameterValue>;
   configSpec?: ConfigSpec | null;
   onConfigure?: () => void;
@@ -231,6 +232,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           outputs: outputPorts.map((p) => p.format),
           inputPorts,
           outputPorts,
+          categories: task?.implements_method ?? [],
           configSpec: task?.config_spec ?? null,
           parameterValues: defaultParameterValues(task?.config_spec),
           onConfigure: () => configureHandlerRef.current(nodeId),
@@ -323,6 +325,7 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
           outputs: outputPorts.map((p) => p.format),
           inputPorts,
           outputPorts,
+          categories: task.implements_method ?? [],
           configSpec: task.config_spec ?? null,
           parameterValues: defaultParameterValues(task.config_spec),
           onConfigure: () => configureHandlerRef.current(id),
@@ -465,6 +468,16 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
     if (!selectedEdgeId) return;
     setEdges((prev) => prev.filter((edge) => edge.id !== selectedEdgeId));
     setSelectedEdgeId(null);
+  }
+
+  function clearCanvas() {
+    setNodes([]);
+    setEdges([]);
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setConfiguringNodeId(null);
+    setSelectedExampleId("");
+    setConnectionError("");
   }
 
   function nodeLabel(node: AnyNode): string {
@@ -776,6 +789,19 @@ export function PipelineBuilderPage({ tasks }: PipelineBuilderPageProps) {
         >
           Remove Selected Connection
         </button>
+        <button
+          type="button"
+          className="danger-btn"
+          onClick={clearCanvas}
+          disabled={nodes.length === 0 && edges.length === 0}
+          title={
+            nodes.length === 0 && edges.length === 0
+              ? "The canvas is already empty"
+              : "Remove every node and connection from the canvas"
+          }
+        >
+          Clear Nodes and Edges
+        </button>
         <p className="builder-connect-hint">
           {selectedEdgeId
             ? (() => {
@@ -918,11 +944,14 @@ function PipelineExportModal({ nodes, edges, onClose }: PipelineExportModalProps
     "Pipeline exported from KGpipe Pipeline Editor"
   );
   const [format, setFormat] = useState<ExportFormat>("yaml");
+  const [sourceFile, setSourceFile] = useState("SOURCE_FILE");
+  const [seedKg, setSeedKg] = useState("SEED_KG");
+  const [ontology, setOntology] = useState("ONTOLOGY");
   const [copyHint, setCopyHint] = useState("");
 
   const pipelineConf = useMemo(
-    () => buildPipelineConf(pipelineName, description, exportOrder.taskNames),
-    [pipelineName, description, exportOrder.taskNames]
+    () => buildPipelineConf(pipelineName, description, exportOrder.tasks),
+    [pipelineName, description, exportOrder.tasks]
   );
 
   const configText = useMemo(
@@ -931,8 +960,13 @@ function PipelineExportModal({ nodes, edges, onClose }: PipelineExportModalProps
   );
 
   const cliCommand = useMemo(
-    () => buildCliCommand(pipelineName),
-    [pipelineName]
+    () =>
+      buildCliCommand(pipelineName, {
+        sourceFile,
+        seedKg,
+        ontology
+      }),
+    [pipelineName, sourceFile, seedKg, ontology]
   );
 
   useEffect(() => {
@@ -991,6 +1025,36 @@ function PipelineExportModal({ nodes, edges, onClose }: PipelineExportModalProps
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Pipeline exported from KGpipe Pipeline Editor"
+              />
+            </label>
+            <label className="export-field">
+              <span>Input</span>
+              <input
+                type="text"
+                value={sourceFile}
+                onChange={(e) => setSourceFile(e.target.value)}
+                placeholder="SOURCE_FILE"
+                spellCheck={false}
+              />
+            </label>
+            <label className="export-field">
+              <span>Target</span>
+              <input
+                type="text"
+                value={seedKg}
+                onChange={(e) => setSeedKg(e.target.value)}
+                placeholder="SEED_KG"
+                spellCheck={false}
+              />
+            </label>
+            <label className="export-field">
+              <span>Ontology (optional)</span>
+              <input
+                type="text"
+                value={ontology}
+                onChange={(e) => setOntology(e.target.value)}
+                placeholder="ONTOLOGY"
+                spellCheck={false}
               />
             </label>
           </div>
@@ -1059,8 +1123,9 @@ function PipelineExportModal({ nodes, edges, onClose }: PipelineExportModalProps
               >
                 See run &amp; reimport
               </a>
-              . The CLI line below is a mock preview — <code>kgpipe run</code> is
-              not wired here.
+              . <code>kgpipe run</code> accepts <code>--input</code> for the source
+              file, <code>--target</code> for the seed KG, and an optional{" "}
+              <code>--ontology</code>.
             </p>
             <pre className="export-code-block export-code-block--cli">{cliCommand}</pre>
           </div>
@@ -1068,7 +1133,7 @@ function PipelineExportModal({ nodes, edges, onClose }: PipelineExportModalProps
           {copyHint ? <p className="export-copy-hint">{copyHint}</p> : null}
         </div>
 
-        <div className="modal-footer">
+        <div className="modal-footer modal-footer--start">
           <button type="button" onClick={onClose}>
             Close
           </button>
@@ -1525,6 +1590,7 @@ function rehydrateBuilderNodes(
         outputs: outputPorts.map((port) => port.format),
         inputPorts,
         outputPorts,
+        categories: task?.implements_method ?? data.categories ?? [],
         configSpec,
         parameterValues: {
           ...defaultParameterValues(configSpec),
@@ -1658,8 +1724,41 @@ function resolveHandleFormat(
   return port ? port.format : null;
 }
 
+const KGPIPE_CATEGORY_NAMESPACES = [
+  "http://github.com/ScaDS/kgpipe/resource/",
+  "http://github.com/ScaDS/kgpipe/ontology/",
+  "http://github.com/ScaDS/kgpipe/"
+];
+
 function taskTypeTags(task: TaskSpec): string[] {
   return task.implements_method ?? [];
+}
+
+/** Shorten a category IRI to `kgo:<local name>` for display on a task node. */
+function prefixedCategory(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.startsWith("kgo:")) return trimmed;
+
+  for (const namespace of KGPIPE_CATEGORY_NAMESPACES) {
+    if (trimmed.startsWith(namespace)) {
+      return `kgo:${categoryLocalName(trimmed.slice(namespace.length))}`;
+    }
+  }
+
+  if (/^[A-Za-z][\w+.-]*:/.test(trimmed) && !trimmed.includes("://")) {
+    return `kgo:${categoryLocalName(trimmed.slice(trimmed.indexOf(":") + 1))}`;
+  }
+
+  return `kgo:${categoryLocalName(trimmed)}`;
+}
+
+function categoryLocalName(value: string): string {
+  const hashIndex = value.lastIndexOf("#");
+  const slashIndex = value.lastIndexOf("/");
+  const splitIndex = Math.max(hashIndex, slashIndex);
+  const name = splitIndex >= 0 ? value.slice(splitIndex + 1) : value;
+  return name || value;
 }
 
 function taskSearchHaystack(task: TaskSpec): string {
@@ -1752,6 +1851,8 @@ function TaskNode({ data, selected }: NodeProps<PipelineNode>) {
       : synthesizePortsFromFormats(data.outputs.length > 0 ? data.outputs : ["any"]);
   const hasConfig = (data.configSpec?.parameters.length ?? 0) > 0;
   const changedParams = changedParameterEntries(data.configSpec, data.parameterValues);
+  const categories = (data.categories ?? []).map((category) => category.trim()).filter(Boolean);
+  const handleTop = categories.length > 0 ? 54 : 34;
 
   return (
     <div
@@ -1760,6 +1861,28 @@ function TaskNode({ data, selected }: NodeProps<PipelineNode>) {
     >
       <div className="task-node-header">
         <div className="task-node-title">{data.label}</div>
+        {categories.length > 0 && (
+          <div className="task-node-categories">
+            {categories.map((category) => {
+              const label = prefixedCategory(category);
+              const color = taskTypeColor(label.slice("kgo:".length));
+              return (
+                <span
+                  key={category}
+                  className="task-type-badge"
+                  title={category}
+                  style={{
+                    backgroundColor: `${color}1a`,
+                    borderColor: color,
+                    color
+                  }}
+                >
+                  {label}
+                </span>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {inputPorts.map((port, idx) => (
@@ -1770,7 +1893,7 @@ function TaskNode({ data, selected }: NodeProps<PipelineNode>) {
           position={Position.Left}
           title={`${port.name} (${port.format})`}
           style={{
-            top: 34 + idx * 16,
+            top: handleTop + idx * 16,
             background: formatColor(port.format),
             border: "2px solid #fff",
             width: 10,
@@ -1787,7 +1910,7 @@ function TaskNode({ data, selected }: NodeProps<PipelineNode>) {
           position={Position.Right}
           title={`${port.name} (${port.format})`}
           style={{
-            top: 34 + idx * 16,
+            top: handleTop + idx * 16,
             background: formatColor(port.format),
             border: "2px solid #fff",
             width: 10,

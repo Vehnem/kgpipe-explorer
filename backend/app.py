@@ -1,7 +1,17 @@
 from __future__ import annotations
 
+from collections import OrderedDict
+from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
+import asyncio
+import io
 import logging
+import os
+import queue
+import stat
+import threading
+import time
+import zipfile
 from pathlib import Path
 from typing import List, Optional
 
@@ -12,6 +22,7 @@ from datetime import datetime, timezone
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from rdflib import BNode, Graph, Literal, URIRef
@@ -308,11 +319,26 @@ def construct_sparql(query: str = Body(..., embed=True)) -> dict[str, object]:
 # ---------------------------------------------------------------------------
 
 SAVED_QUERIES_DB_PATH = Path(__file__).resolve().parent / "saved_queries.sqlite"
+_EXAMPLE_SCOPES = frozenset({"explorer", "dataview"})
 
 
 class SavedSparqlExample(BaseModel):
     label: str
     query: str
+
+
+def _normalize_example_scope(scope: str) -> str:
+    value = scope.strip() or "explorer"
+    if value not in _EXAMPLE_SCOPES:
+        raise HTTPException(status_code=400, detail="scope must be 'explorer' or 'dataview'")
+    return value
+
+
+def _builtin_examples_for_scope(scope: str) -> list[dict[str, object]]:
+    fixtures = get_fixtures()
+    if scope == "dataview":
+        return fixtures.dataview_sparql_examples
+    return fixtures.sparql_builtin_examples
 
 
 def _get_db() -> sqlite3.Connection:
@@ -321,35 +347,66 @@ def _get_db() -> sqlite3.Connection:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS sparql_examples (
-            label TEXT PRIMARY KEY,
+            scope TEXT NOT NULL DEFAULT 'explorer',
+            label TEXT NOT NULL,
             query TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (scope, label)
         )
         """
     )
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(sparql_examples)")}
+    if "scope" not in columns:
+        conn.execute("ALTER TABLE sparql_examples RENAME TO sparql_examples_legacy")
+        conn.execute(
+            """
+            CREATE TABLE sparql_examples (
+                scope TEXT NOT NULL DEFAULT 'explorer',
+                label TEXT NOT NULL,
+                query TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (scope, label)
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO sparql_examples(scope, label, query, created_at)
+            SELECT 'explorer', label, query, created_at FROM sparql_examples_legacy
+            """
+        )
+        conn.execute("DROP TABLE sparql_examples_legacy")
     return conn
 
 
 @app.get("/sparql/examples/builtin", response_model=list[SavedSparqlExample])
-def list_builtin_sparql_examples() -> list[SavedSparqlExample]:
+def list_builtin_sparql_examples(scope: str = "explorer") -> list[SavedSparqlExample]:
     """Return builtin SPARQL example queries from fixtures."""
+    normalized = _normalize_example_scope(scope)
     return [
-        SavedSparqlExample(label=item["label"], query=item["query"])
-        for item in get_fixtures().sparql_builtin_examples
+        SavedSparqlExample(label=str(item["label"]), query=str(item["query"]))
+        for item in _builtin_examples_for_scope(normalized)
     ]
 
 
 @app.get("/sparql/examples", response_model=list[SavedSparqlExample])
-def list_saved_sparql_examples() -> list[SavedSparqlExample]:
+def list_saved_sparql_examples(scope: str = "explorer") -> list[SavedSparqlExample]:
+    normalized = _normalize_example_scope(scope)
     with _get_db() as conn:
         rows = conn.execute(
-            "SELECT label, query FROM sparql_examples ORDER BY created_at DESC, label ASC"
+            """
+            SELECT label, query FROM sparql_examples
+            WHERE scope = ?
+            ORDER BY created_at DESC, label ASC
+            """,
+            (normalized,),
         ).fetchall()
     return [SavedSparqlExample(label=row["label"], query=row["query"]) for row in rows]
 
 
 @app.post("/sparql/examples", response_model=SavedSparqlExample)
-def save_sparql_example(example: SavedSparqlExample) -> SavedSparqlExample:
+def save_sparql_example(example: SavedSparqlExample, scope: str = "explorer") -> SavedSparqlExample:
+    normalized = _normalize_example_scope(scope)
     label = example.label.strip()
     query = example.query.strip()
     if not label:
@@ -361,13 +418,13 @@ def save_sparql_example(example: SavedSparqlExample) -> SavedSparqlExample:
     with _get_db() as conn:
         conn.execute(
             """
-            INSERT INTO sparql_examples(label, query, created_at)
-            VALUES(?, ?, ?)
-            ON CONFLICT(label) DO UPDATE SET
+            INSERT INTO sparql_examples(scope, label, query, created_at)
+            VALUES(?, ?, ?, ?)
+            ON CONFLICT(scope, label) DO UPDATE SET
                 query=excluded.query,
                 created_at=excluded.created_at
             """,
-            (label, query, created_at),
+            (normalized, label, query, created_at),
         )
         conn.commit()
     return SavedSparqlExample(label=label, query=query)
@@ -837,6 +894,7 @@ class ArtifactFile(BaseModel):
 class StageArtifacts(BaseModel):
     files: list[ArtifactFile]
     tmp_count: int = 0
+    tmp_bytes: int = 0
 
 
 def _results_root() -> Path:
@@ -906,10 +964,37 @@ def _scan_stage_meta_and_kg(stage_dir: Path, rel_prefix: str) -> list[ArtifactFi
     return files
 
 
-def _count_tmp_files(tmp_dir: Path) -> int:
+def _tmp_dir_has_files(tmp_dir: Path) -> bool:
     if not tmp_dir.is_dir():
-        return 0
-    return sum(1 for path in tmp_dir.rglob("*") if path.is_file())
+        return False
+    for path in tmp_dir.rglob("*"):
+        try:
+            if stat.S_ISREG(path.lstat().st_mode):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def _summarize_tmp_dir(tmp_dir: Path) -> tuple[int, int]:
+    """Return ``(file_count, total_bytes)`` for regular files under ``tmp/``.
+
+    Symlinks are skipped so the count matches what the zip download includes.
+    """
+    if not tmp_dir.is_dir():
+        return 0, 0
+    count = 0
+    total = 0
+    for path in tmp_dir.rglob("*"):
+        try:
+            st = path.lstat()
+        except OSError:
+            continue
+        if not stat.S_ISREG(st.st_mode):
+            continue
+        count += 1
+        total += st.st_size
+    return count, total
 
 
 def _list_tmp_files(tmp_dir: Path, rel_prefix: str) -> list[ArtifactFile]:
@@ -956,8 +1041,10 @@ def _build_real_artifacts(
                 continue
             stage_dir, rel_prefix = resolved
             files = _scan_stage_meta_and_kg(stage_dir, rel_prefix)
-            tmp_count = _count_tmp_files(stage_dir / "tmp")
-            result[pipeline][stage] = StageArtifacts(files=files, tmp_count=tmp_count)
+            tmp_count, tmp_bytes = _summarize_tmp_dir(stage_dir / "tmp")
+            result[pipeline][stage] = StageArtifacts(
+                files=files, tmp_count=tmp_count, tmp_bytes=tmp_bytes
+            )
     return result
 
 
@@ -1018,6 +1105,193 @@ def get_results_tmp_artifacts(
         return []
     stage_dir, rel_prefix = resolved
     return _list_tmp_files(stage_dir / "tmp", rel_prefix)
+
+
+def _attachment_disposition(filename: str) -> str:
+    safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in filename).strip("._")
+    if not safe:
+        safe = "download"
+    return f'attachment; filename="{safe}"'
+
+
+def _stage_root_file(pipeline_id: str, stage_id: str, name: str) -> Path:
+    """Resolve a main artifact that sits directly in the stage directory."""
+    name = name.strip()
+    if not name or Path(name).name != name or name in {".", ".."}:
+        raise HTTPException(status_code=400, detail="invalid file name")
+    resolved = _resolve_stage_dir(pipeline_id, stage_id)
+    if resolved is None:
+        raise HTTPException(status_code=404, detail="stage not found")
+    stage_dir, _rel_prefix = resolved
+    path = (stage_dir / name).resolve()
+    try:
+        path.relative_to(stage_dir.resolve())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid file name") from None
+    if path.is_symlink() or not path.is_file():
+        raise HTTPException(status_code=404, detail="file not found")
+    return path
+
+
+@app.get("/results/artifacts/file")
+def download_results_artifact_file(
+    pipeline: str,
+    stage: str,
+    name: str,
+    run_id: str | None = None,
+) -> FileResponse:
+    """Download one main stage artifact (plan, report, metrics, or KG output)."""
+    del run_id  # reserved for per-run results roots in the future
+    pipeline = pipeline.strip()
+    stage = stage.strip()
+    if not pipeline or not stage:
+        raise HTTPException(status_code=400, detail="pipeline and stage are required")
+    path = _stage_root_file(pipeline, stage, name)
+    return FileResponse(
+        path,
+        media_type=_guess_mime_type(path.name),
+        filename=path.name,
+    )
+
+
+class _ZipChunkWriter(io.RawIOBase):
+    """Non-seekable sink so ``zipfile`` can stream a zip (data descriptors, Zip64)."""
+
+    def __init__(self) -> None:
+        self._chunks: list[bytes] = []
+
+    def writable(self) -> bool:
+        return True
+
+    def seekable(self) -> bool:
+        return False
+
+    def write(self, b: bytes) -> int:
+        if isinstance(b, memoryview):
+            data = b.tobytes()
+        elif isinstance(b, bytes):
+            data = b
+        else:
+            data = bytes(b)
+        if data:
+            self._chunks.append(data)
+        return len(data)
+
+    def take(self) -> bytes:
+        if not self._chunks:
+            return b""
+        payload = b"".join(self._chunks)
+        self._chunks.clear()
+        return payload
+
+
+def _iter_tmp_zip(tmp_dir: Path) -> Iterator[bytes]:
+    """Stream ``tmp/`` as a deflated zip.
+
+    Compress level 1 is enough for these artifacts (JSON and N-Triples shrink
+    several times) and stays near disk speed, so the archive is built while
+    the client downloads it instead of being written to disk first.
+    """
+    writer = _ZipChunkWriter()
+    with zipfile.ZipFile(
+        writer,
+        mode="w",
+        compression=zipfile.ZIP_DEFLATED,
+        compresslevel=1,
+        allowZip64=True,
+    ) as archive:
+        for path in sorted(tmp_dir.rglob("*")):
+            try:
+                if not stat.S_ISREG(path.lstat().st_mode):
+                    continue
+            except OSError:
+                continue
+            try:
+                archive.write(path, path.relative_to(tmp_dir).as_posix())
+            except OSError:
+                continue
+            chunk = writer.take()
+            if chunk:
+                yield chunk
+    tail = writer.take()
+    if tail:
+        yield tail
+
+
+async def _aiter_tmp_zip(tmp_dir: Path) -> AsyncIterator[bytes]:
+    """Compress in a worker thread so a large stage does not block other requests."""
+    chunks: queue.Queue[bytes | BaseException | None] = queue.Queue(maxsize=2)
+    cancelled = threading.Event()
+
+    def _put(item: bytes | BaseException | None) -> bool:
+        while not cancelled.is_set():
+            try:
+                chunks.put(item, timeout=0.2)
+                return True
+            except queue.Full:
+                continue
+        return False
+
+    def worker() -> None:
+        try:
+            for chunk in _iter_tmp_zip(tmp_dir):
+                if not _put(chunk):
+                    return
+        except BaseException as exc:
+            if not cancelled.is_set():
+                _put(exc)
+        finally:
+            while True:
+                try:
+                    chunks.put(None, timeout=0.2)
+                    break
+                except queue.Full:
+                    if cancelled.is_set():
+                        break
+
+    thread = threading.Thread(target=worker, name="tmp-zip", daemon=True)
+    thread.start()
+    loop = asyncio.get_running_loop()
+    try:
+        while True:
+            item = await loop.run_in_executor(None, chunks.get)
+            if item is None:
+                break
+            if isinstance(item, BaseException):
+                raise item
+            yield item
+    finally:
+        cancelled.set()
+
+
+@app.get("/results/artifacts/tmp.zip")
+def download_results_tmp_zip(
+    pipeline: str,
+    stage: str,
+    run_id: str | None = None,
+) -> StreamingResponse:
+    """Stream a zip of one stage's intermediate ``tmp/`` files."""
+    del run_id  # reserved for per-run results roots in the future
+    pipeline = pipeline.strip()
+    stage = stage.strip()
+    if not pipeline or not stage:
+        raise HTTPException(status_code=400, detail="pipeline and stage are required")
+
+    resolved = _resolve_stage_dir(pipeline, stage)
+    if resolved is None:
+        raise HTTPException(status_code=404, detail="stage not found")
+    stage_dir, rel_prefix = resolved
+    tmp_dir = stage_dir / "tmp"
+    if not _tmp_dir_has_files(tmp_dir):
+        raise HTTPException(status_code=404, detail="no intermediate files")
+
+    alias = rel_prefix.split("/", 1)[0]
+    filename = f"{alias}_{stage}_intermediates.zip"
+    return StreamingResponse(
+        _aiter_tmp_zip(tmp_dir),
+        media_type="application/zip",
+        headers={"Content-Disposition": _attachment_disposition(filename)},
+    )
 
 
 def _resolve_final_kg_path(pipeline_id: str) -> tuple[Path, str, str] | None:
@@ -1119,11 +1393,123 @@ def _sparql_result_to_json(result: object) -> dict[str, object]:
     return {"head": {"vars": ["s", "p", "o"]}, "results": {"bindings": bindings}}
 
 
-def _execute_sparql_on_nt(kg_path: Path, query: str) -> dict[str, object]:
+class _NtGraphCacheEntry:
+    def __init__(self, graph: Graph) -> None:
+        self.graph = graph
+        self.lock = threading.Lock()
+        self.loaded_at = time.monotonic()
+
+
+class _NtGraphCache:
+    """Keep recently parsed N-Triples graphs so repeat SPARQL skips ``Graph.parse``.
+
+    A ``result.nt`` of about 17MB takes ~15s to parse and ~170MB of memory.
+    Entries are the last ``max_entries`` graphs, dropped after ``ttl_seconds``
+    (``0`` disables the time limit). The key includes mtime and size, so a
+    rewritten file is parsed again. ``max_entries <= 0`` disables the cache.
+    """
+
+    def __init__(self, max_entries: int, ttl_seconds: float) -> None:
+        self.max_entries = max_entries
+        self.ttl_seconds = ttl_seconds
+        self._lock = threading.Lock()
+        self._entries: OrderedDict[tuple[str, int, int], _NtGraphCacheEntry] = OrderedDict()
+
+    def get(self, path: Path) -> tuple[Graph, threading.Lock]:
+        if self.max_entries <= 0:
+            return _parse_nt_graph(path), threading.Lock()
+
+        key = _nt_file_key(path)
+        with self._lock:
+            self._evict_expired(time.monotonic())
+            cached = self._entries.get(key)
+            if cached is not None:
+                self._entries.move_to_end(key)
+                REQUEST_LOGGER.info("nt graph cache hit path=%s", key[0])
+                return cached.graph, cached.lock
+
+        graph = _parse_nt_graph(path)
+        # Don't store a graph under a fingerprint the file no longer has.
+        if _nt_file_key(path) != key:
+            REQUEST_LOGGER.info("nt graph cache skip path=%s (file changed during parse)", key[0])
+            return graph, threading.Lock()
+
+        entry = _NtGraphCacheEntry(graph)
+        with self._lock:
+            self._evict_expired(time.monotonic())
+            existing = self._entries.get(key)
+            if existing is not None:
+                self._entries.move_to_end(key)
+                REQUEST_LOGGER.info("nt graph cache hit path=%s", key[0])
+                return existing.graph, existing.lock
+            for stale in [item for item in self._entries if item[0] == key[0]]:
+                del self._entries[stale]
+            self._entries[key] = entry
+            self._entries.move_to_end(key)
+            while len(self._entries) > self.max_entries:
+                self._entries.popitem(last=False)
+        REQUEST_LOGGER.info("nt graph cache miss path=%s", key[0])
+        return entry.graph, entry.lock
+
+    def _evict_expired(self, now: float) -> None:
+        if self.ttl_seconds <= 0:
+            return
+        expired = [
+            item
+            for item, entry in self._entries.items()
+            if now - entry.loaded_at >= self.ttl_seconds
+        ]
+        for item in expired:
+            del self._entries[item]
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        REQUEST_LOGGER.warning("Ignoring invalid %s=%r; using %s", name, raw, default)
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        REQUEST_LOGGER.warning("Ignoring invalid %s=%r; using %s", name, raw, default)
+        return default
+
+
+def _nt_file_key(path: Path) -> tuple[str, int, int]:
+    resolved = path.resolve()
+    stat = resolved.stat()
+    return (str(resolved), stat.st_mtime_ns, stat.st_size)
+
+
+def _parse_nt_graph(path: Path) -> Graph:
     graph = Graph()
-    graph.parse(kg_path, format="nt")
-    result = graph.query(query)
-    return _sparql_result_to_json(result)
+    graph.parse(path, format="nt")
+    return graph
+
+
+# Last few final result.nt graphs. Size 0 disables the cache; TTL 0 keeps
+# entries until they fall out of the LRU window.
+_NT_GRAPH_CACHE_SIZE = max(0, _env_int("KGPIPE_NT_GRAPH_CACHE_SIZE", 10))
+_NT_GRAPH_CACHE_TTL_SECONDS = max(0.0, _env_float("KGPIPE_NT_GRAPH_CACHE_TTL_SECONDS", 1800.0))
+_nt_graph_cache = _NtGraphCache(_NT_GRAPH_CACHE_SIZE, _NT_GRAPH_CACHE_TTL_SECONDS)
+
+
+def _execute_sparql_on_nt(kg_path: Path, query: str) -> dict[str, object]:
+    """Run SPARQL against one N-Triples file, reusing a cached rdflib graph."""
+    graph, lock = _nt_graph_cache.get(kg_path)
+    with lock:
+        result = graph.query(query)
+        return _sparql_result_to_json(result)
 
 
 class DataViewQueryRequest(BaseModel):

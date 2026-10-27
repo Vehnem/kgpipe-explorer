@@ -21,8 +21,8 @@ export const tutorialStepsByPage: Record<TutorialPage, TutorialStep[]> = {
         de: "Hauptbereiche"
       },
       description: {
-        en: "Use the tabs to move between learning, metadata exploration, pipeline design, results, and rankings.",
-        de: "Nutze die Tabs, um zwischen Lernen, Metadaten-Exploration, Pipeline-Design, Ergebnissen und Rankings zu wechseln."
+        en: "Use the tabs to move between learning, pipeline design, results, rankings, and metadata inspection.",
+        de: "Nutze die Tabs, um zwischen Lernen, Pipeline-Design, Ergebnissen, Rankings und Metadaten-Inspektion zu wechseln."
       },
       side: "bottom"
     },
@@ -221,8 +221,8 @@ export const tutorialStepsByPage: Record<TutorialPage, TutorialStep[]> = {
         de: "Mit dem Workflow starten"
       },
       description: {
-        en: "Use the workflow cards to jump into the main features: inspect metadata, sketch a pipeline, compare outputs, and reason about rankings.",
-        de: "Nutze die Workflow-Karten, um die Hauptfunktionen zu entdecken: Metadaten ansehen, Pipeline skizzieren, Outputs vergleichen und Rankings bewerten."
+        en: "Use the workflow cards to jump into the main features: sketch a pipeline, compare outputs, reason about rankings, and inspect metadata when needed.",
+        de: "Nutze die Workflow-Karten, um die Hauptfunktionen zu entdecken: Pipeline skizzieren, Outputs vergleichen, Rankings bewerten und bei Bedarf Metadaten ansehen."
       },
       side: "bottom"
     },

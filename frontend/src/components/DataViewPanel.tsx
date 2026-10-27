@@ -1,8 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import cytoscape from "cytoscape";
-import type { ArtifactFile, DataViewPipelineResult, ResultsArtifacts } from "../api";
-import { queryPipelineKgs } from "../api";
+import type {
+  ArtifactFile,
+  DataViewPipelineResult,
+  ResultsArtifacts,
+  SavedSparqlExample
+} from "../api";
+import {
+  fetchBuiltinSparqlExamples,
+  fetchSavedSparqlExamples,
+  queryPipelineKgs,
+  saveSparqlExample
+} from "../api";
 import { PipelineName } from "./PipelineName";
+import { SparqlEditor } from "./SparqlEditor";
 import { emitTutorialEvent, TUTORIAL_EVENTS } from "../tutorial/tutorialEvents";
 import {
   buildGraphElementsFromBindings,
@@ -190,10 +201,49 @@ export type DataViewPanelProps = {
 
 export function DataViewPanel({ pipelines, rows, artifacts, runId }: DataViewPanelProps) {
   const [queryText, setQueryText] = useState(DEFAULT_DATA_VIEW_QUERY);
+  const [builtinExamples, setBuiltinExamples] = useState<SavedSparqlExample[]>([]);
+  const [savedExamples, setSavedExamples] = useState<SavedSparqlExample[]>([]);
+  const [savedExamplesStatus, setSavedExamplesStatus] = useState("");
   const [resultMode, setResultMode] = useState<DataViewResultMode>("table");
   const [queryStatus, setQueryStatus] = useState("");
   const [queryRunning, setQueryRunning] = useState(false);
   const [queryResults, setQueryResults] = useState<DataViewPipelineResult[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadExamples() {
+      try {
+        const builtins = await fetchBuiltinSparqlExamples("dataview");
+        if (!cancelled) setBuiltinExamples(builtins);
+      } catch {
+        if (!cancelled) setBuiltinExamples([]);
+      }
+    }
+    void loadExamples();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSavedExamples() {
+      setSavedExamplesStatus("");
+      try {
+        const examples = await fetchSavedSparqlExamples("dataview");
+        if (!cancelled) setSavedExamples(examples);
+      } catch (error) {
+        if (cancelled) return;
+        const message =
+          error instanceof Error ? error.message : "Unknown error while loading saved examples.";
+        setSavedExamplesStatus(message);
+      }
+    }
+    void loadSavedExamples();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const targets = useMemo(
     () => pipelines.map((p) => resolveFinalKgTarget(p, rows, artifacts)),
@@ -253,6 +303,32 @@ export function DataViewPanel({ pipelines, rows, artifacts, runId }: DataViewPan
     }
   }
 
+  async function handleSaveExample() {
+    const trimmedQuery = queryText.trim();
+    if (!trimmedQuery) {
+      setQueryStatus("Cannot save an empty query.");
+      return;
+    }
+    const name = window.prompt("Save current query as example. Name:");
+    if (name === null) return;
+    const label = name.trim();
+    if (!label) {
+      setQueryStatus("Example name cannot be empty.");
+      return;
+    }
+    try {
+      await saveSparqlExample({ label, query: trimmedQuery }, "dataview");
+      const refreshed = await fetchSavedSparqlExamples("dataview");
+      setSavedExamples(refreshed);
+      setSavedExamplesStatus("");
+      setQueryStatus(`Saved example "${label}".`);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown error while saving example.";
+      setQueryStatus(message);
+    }
+  }
+
   return (
     <div className="results-dataview" data-tutorial="results-dataview">
       <section className="results-dataview-query">
@@ -262,16 +338,58 @@ export function DataViewPanel({ pipelines, rows, artifacts, runId }: DataViewPan
             Same query runs against each selected pipeline&apos;s final result.nt
           </span>
         </div>
+        <label
+          htmlFor="results-dataview-example"
+          className="muted"
+          style={{ fontSize: 12, display: "block" }}
+        >
+          Example queries
+        </label>
+        <select
+          id="results-dataview-example"
+          className="results-dataview-select"
+          defaultValue=""
+          onChange={(event) => {
+            const selectedLabel = event.target.value;
+            const chosenSaved = savedExamples.find((q) => q.label === selectedLabel);
+            const chosenBuiltin = builtinExamples.find((q) => q.label === selectedLabel);
+            const chosen = chosenSaved ?? chosenBuiltin;
+            if (chosen) setQueryText(chosen.query);
+            event.target.value = "";
+          }}
+        >
+          <option value="" disabled>
+            — select an example —
+          </option>
+          {savedExamples.length ? (
+            <optgroup label="Saved">
+              {savedExamples.map((q) => (
+                <option key={`saved:${q.label}`} value={q.label}>
+                  {q.label}
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
+          <optgroup label="Built-in">
+            {builtinExamples.map((q) => (
+              <option key={`builtin:${q.label}`} value={q.label}>
+                {q.label}
+              </option>
+            ))}
+          </optgroup>
+        </select>
+        {savedExamplesStatus ? (
+          <p className="muted" style={{ margin: "0 0 8px", fontSize: 12 }}>
+            Saved examples: {savedExamplesStatus}
+          </p>
+        ) : null}
         <label htmlFor="results-dataview-query" className="muted" style={{ fontSize: 12 }}>
           Query text
         </label>
-        <textarea
+        <SparqlEditor
           id="results-dataview-query"
-          className="results-dataview-textarea"
           value={queryText}
-          onChange={(e) => setQueryText(e.target.value)}
-          rows={8}
-          spellCheck={false}
+          onChange={setQueryText}
         />
         <div className="results-dataview-targets">
           {targets.map((t, idx) => (
@@ -300,6 +418,9 @@ export function DataViewPanel({ pipelines, rows, artifacts, runId }: DataViewPan
             disabled={queryRunning}
           >
             {queryRunning ? "Running…" : "Run Query"}
+          </button>
+          <button type="button" onClick={() => void handleSaveExample()} disabled={queryRunning}>
+            Save as example…
           </button>
           <div className="preview-mode-toggle" role="tablist" aria-label="Result view mode">
             <button

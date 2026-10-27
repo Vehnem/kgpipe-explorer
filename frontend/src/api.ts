@@ -69,6 +69,9 @@ export type SavedSparqlExample = {
   query: string;
 };
 
+/** explorer = Metadata Explorer; dataview = Pipeline Results Data View. */
+export type SparqlExampleScope = "explorer" | "dataview";
+
 export type ArtifactFile = {
   name: string;
   description: string;
@@ -81,6 +84,8 @@ export type ArtifactFile = {
 export type StageArtifacts = {
   files: ArtifactFile[];
   tmp_count: number;
+  /** Uncompressed size of intermediate files. The zip download is smaller. */
+  tmp_bytes?: number;
 };
 
 /** { pipeline_id: { stage_id: StageArtifacts } } */
@@ -217,21 +222,35 @@ export async function constructSparql(
     body: JSON.stringify({ query })
   });
   if (!res.ok) {
-    throw new Error(`Failed to run SPARQL construct (${res.status})`);
+    const detail = await res.text();
+    throw new Error(
+      detail
+        ? `Failed to run SPARQL query (${res.status}): ${detail}`
+        : `Failed to run SPARQL query (${res.status})`
+    );
   }
   return (await res.json()) as SparqlConstructResponse;
 }
 
-export async function fetchSavedSparqlExamples(): Promise<SavedSparqlExample[]> {
-  const res = await fetch(`${API_BASE}/sparql/examples`);
+export async function fetchSavedSparqlExamples(
+  scope: SparqlExampleScope = "explorer"
+): Promise<SavedSparqlExample[]> {
+  const url = new URL(`${API_BASE}/sparql/examples`);
+  url.searchParams.set("scope", scope);
+  const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Failed to fetch saved SPARQL examples (${res.status})`);
   }
   return (await res.json()) as SavedSparqlExample[];
 }
 
-export async function saveSparqlExample(payload: SavedSparqlExample): Promise<SavedSparqlExample> {
-  const res = await fetch(`${API_BASE}/sparql/examples`, {
+export async function saveSparqlExample(
+  payload: SavedSparqlExample,
+  scope: SparqlExampleScope = "explorer"
+): Promise<SavedSparqlExample> {
+  const url = new URL(`${API_BASE}/sparql/examples`);
+  url.searchParams.set("scope", scope);
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -322,6 +341,32 @@ export async function fetchResultsArtifacts(runId?: string): Promise<ResultsArti
   return (await res.json()) as ResultsArtifacts;
 }
 
+export function resultsArtifactFileUrl(
+  pipeline: string,
+  stage: string,
+  name: string,
+  runId?: string
+): string {
+  const url = new URL(`${API_BASE}/results/artifacts/file`);
+  url.searchParams.set("pipeline", pipeline);
+  url.searchParams.set("stage", stage);
+  url.searchParams.set("name", name);
+  if (runId) {
+    url.searchParams.set("run_id", runId);
+  }
+  return url.toString();
+}
+
+export function resultsTmpZipUrl(pipeline: string, stage: string, runId?: string): string {
+  const url = new URL(`${API_BASE}/results/artifacts/tmp.zip`);
+  url.searchParams.set("pipeline", pipeline);
+  url.searchParams.set("stage", stage);
+  if (runId) {
+    url.searchParams.set("run_id", runId);
+  }
+  return url.toString();
+}
+
 export async function fetchResultsTmpArtifacts(
   pipeline: string,
   stage: string,
@@ -367,8 +412,12 @@ export async function fetchDataElements(): Promise<DataElement[]> {
   return (await res.json()) as DataElement[];
 }
 
-export async function fetchBuiltinSparqlExamples(): Promise<SavedSparqlExample[]> {
-  const res = await fetch(`${API_BASE}/sparql/examples/builtin`);
+export async function fetchBuiltinSparqlExamples(
+  scope: SparqlExampleScope = "explorer"
+): Promise<SavedSparqlExample[]> {
+  const url = new URL(`${API_BASE}/sparql/examples/builtin`);
+  url.searchParams.set("scope", scope);
+  const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Failed to fetch builtin SPARQL examples (${res.status})`);
   }

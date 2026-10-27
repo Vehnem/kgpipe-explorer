@@ -680,6 +680,13 @@
         "format_label": "csv"
       },
       {
+        "source": "n-reduce-to-best-match-per-entity-2",
+        "target": "n-aggregate-2matches-4",
+        "source_handle": "out:output",
+        "target_handle": "in:json1",
+        "format_label": "er.json"
+      },
+      {
         "source": "n-valentine-csv-matching-v2-3",
         "target": "n-aggregate-2matches-4",
         "source_handle": "out:output",
@@ -1025,7 +1032,7 @@
         "format_label": "er.json"
       },
       {
-        "source": "n-paris-exchange-3",
+        "source": "n-llm-task-rdf-ontology-matching-v1-0",
         "target": "n-aggregate-2matches-4",
         "source_handle": "out:output",
         "target_handle": "in:json2",
@@ -2110,14 +2117,14 @@
         "format_label": "spotlight.json"
       },
       {
-        "source": "n-dbpedia-spotlight-exchange-4",
+        "source": "n-label-alias-embedding-rl-2",
         "target": "n-aggregate3-te-json-5",
         "source_handle": "out:output",
         "target_handle": "in:json1",
         "format_label": "te.json"
       },
       {
-        "source": "n-dbpedia-spotlight-exchange-4",
+        "source": "n-corenlp-exchange-1",
         "target": "n-aggregate3-te-json-5",
         "source_handle": "out:output",
         "target_handle": "in:json2",
@@ -2483,14 +2490,14 @@
         "format_label": "te.json"
       },
       {
-        "source": "n-label-alias-embedding-rl-3",
+        "source": "n-corenlp-exchange-1",
         "target": "n-aggregate3-te-json-4",
         "source_handle": "out:output",
         "target_handle": "in:json1",
         "format_label": "te.json"
       },
       {
-        "source": "n-label-alias-embedding-rl-3",
+        "source": "n-label-alias-embedding-el-2",
         "target": "n-aggregate3-te-json-4",
         "source_handle": "out:output",
         "target_handle": "in:json2",
@@ -2797,14 +2804,14 @@
         "format_label": "te.json"
       },
       {
-        "source": "n-label-alias-embedding-rl-2",
+        "source": "n-llm-task-text-triple-extract-v1-0",
         "target": "n-aggregate3-te-json-3",
         "source_handle": "out:output",
         "target_handle": "in:json1",
         "format_label": "te.json"
       },
       {
-        "source": "n-label-alias-embedding-rl-2",
+        "source": "n-label-alias-embedding-el-1",
         "target": "n-aggregate3-te-json-3",
         "source_handle": "out:output",
         "target_handle": "in:json2",

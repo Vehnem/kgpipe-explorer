@@ -11,7 +11,8 @@ Domain data that is **not** live from Virtuoso SPARQL or the saved-queries SQLit
 | `pipeline_naming.json` | `GET /pipelines/metadata` | Task-family / variant display names |
 | `stage_artifacts.json` | `GET /results/artifacts` | Mock artifact templates per stage |
 | `data_elements.json` | `GET /builder/data-elements` | Builder source/sink palette |
-| `sparql_builtin_examples.json` | `GET /sparql/examples/builtin` | Seed SPARQL CONSTRUCT examples |
+| `sparql_builtin_examples.json` | `GET /sparql/examples/builtin?scope=explorer` | Seed SPARQL examples for Metadata Explorer |
+| `dataview_sparql_examples.json` | `GET /sparql/examples/builtin?scope=dataview` | Seed SPARQL examples for Results Data View |
 | `entity_types.json` | `GET /ontology/entity-types` | Explorer entity filters + discovery query |
 | `leaderboard_defaults.json` | `GET /leaderboard/defaults` | Default metric groups + assignment rules |
 | `runs/*.tsv` | `GET /leaderboard/runs` | Per-benchmark (or shared base) metric rows |
@@ -35,7 +36,7 @@ Example: add `runs/kgi-bench-people.tsv` and the People benchmark will show thos
 | Artifact | Location | Used by | Purpose |
 |----------|----------|---------|---------|
 | Virtuoso SPARQL endpoint | `SYS_KG_URL` in kgpipe config (e.g. `sparql://localhost:18890/sparql-auth`) | `GET /tasks`, `POST /compatibility/check`, `POST /sparql/construct` | Live PipeKG system graph |
-| Saved SPARQL examples DB | `backend/saved_queries.sqlite` | `GET/POST /sparql/examples` | User-persisted queries |
+| Saved SPARQL examples DB | `backend/saved_queries.sqlite` | `GET/POST /sparql/examples` (`scope=explorer` or `scope=dataview`) | User-persisted queries, kept separate per page |
 
 ## How to update demo data later
 

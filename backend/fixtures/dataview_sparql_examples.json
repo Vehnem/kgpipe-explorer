@@ -1,0 +1,34 @@
+[
+  {
+    "label": "All triples (sample, limit 50)",
+    "query": "CONSTRUCT { ?s ?p ?o }\nWHERE { ?s ?p ?o }\nLIMIT 50"
+  },
+  {
+    "label": "Types and labels",
+    "query": "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nCONSTRUCT {\n  ?s a ?type .\n  ?s rdfs:label ?label .\n}\nWHERE {\n  ?s a ?type .\n  OPTIONAL { ?s rdfs:label ?label . }\n}\nLIMIT 80"
+  },
+  {
+    "label": "Names and labels",
+    "query": "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nPREFIX schema: <http://schema.org/>\nSELECT ?s ?name\nWHERE {\n  ?s ?p ?name .\n  FILTER(?p IN (rdfs:label, schema:name))\n  FILTER(isLiteral(?name))\n}\nLIMIT 100"
+  },
+  {
+    "label": "Distinct predicates",
+    "query": "SELECT DISTINCT ?p\nWHERE { ?s ?p ?o }\nORDER BY ?p\nLIMIT 200"
+  },
+  {
+    "label": "Type counts",
+    "query": "SELECT ?type (COUNT(?s) AS ?count)\nWHERE { ?s a ?type }\nGROUP BY ?type\nORDER BY DESC(?count)\nLIMIT 100"
+  },
+  {
+    "label": "Triple count",
+    "query": "SELECT (COUNT(*) AS ?triples)\nWHERE { ?s ?p ?o }"
+  },
+  {
+    "label": "Literal property values",
+    "query": "SELECT ?s ?p ?o\nWHERE {\n  ?s ?p ?o .\n  FILTER(isLiteral(?o))\n}\nLIMIT 50"
+  },
+  {
+    "label": "Typed entities and their triples",
+    "query": "CONSTRUCT { ?s ?p ?o }\nWHERE {\n  ?s a ?type .\n  ?s ?p ?o .\n}\nLIMIT 80"
+  }
+]
